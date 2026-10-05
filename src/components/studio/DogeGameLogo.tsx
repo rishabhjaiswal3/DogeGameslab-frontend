@@ -1,4 +1,5 @@
-import { DogeIcon, DogeOSWordmark } from "@/components/dogeos/DogeBrand";
+import dogeGameLabMark from "@/assets/dogegamelab-mark.webp";
+import { DogeOSWordmark } from "@/components/dogeos/DogeBrand";
 import { cn } from "@/lib/utils";
 
 type DogeGameLogoProps = {
@@ -9,7 +10,7 @@ type DogeGameLogoProps = {
   coBrand?: boolean;
 };
 
-/** Pixel wordmark: DOGE//CREATE. Tapping it reloads the studio, as before. */
+/** The DogeGameLab logo: Doge mark + pixel wordmark. Tapping it reloads the studio, as before. */
 export function DogeGameLogo({
   className = "",
   compact = false,
@@ -19,14 +20,20 @@ export function DogeGameLogo({
     <button
       type="button"
       onClick={() => window.location.reload()}
-      aria-label="DogeGame Create — reload"
+      aria-label="DogeGameLab — reload"
       title="Reload"
       className={cn(
         "hover-glitch group inline-flex shrink-0 items-center gap-2 text-left outline-none",
         className,
       )}
     >
-      <DogeIcon size={compact ? 26 : 24} className="rounded-[7px]" />
+      <img
+        src={dogeGameLabMark}
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+        className={cn("shrink-0 select-none", compact ? "size-[28px]" : "size-[26px]")}
+      />
       <span className="font-pixel whitespace-nowrap text-[11px] leading-none text-phos glow-phos sm:text-[12px]">
         {compact ? (
           <>
@@ -36,8 +43,8 @@ export function DogeGameLogo({
         ) : (
           <>
             <span className="text-doge">DOGE</span>
-            <span className="text-magenta">//</span>
-            <span className="text-text">CREATE</span>
+            <span className="text-text">GAME</span>
+            <span className="text-phos">LAB</span>
           </>
         )}
       </span>

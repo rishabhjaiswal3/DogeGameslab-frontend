@@ -18,11 +18,12 @@ import {
 } from "@/components/term/Term";
 import { cn } from "@/lib/utils";
 
-// Three quality tiers. The tier the user taps owns the models AND the strategy
-// on the backend (Tier 1 = hybrid seed-edit, Tier 2 & 3 = fully agentic from
-// scratch), so the button only needs to send the tier number.
+// Two build modes. The tier the user taps owns the models AND the strategy on
+// the backend: Fast = tier 1 (hybrid seed-edit on low-cost models), Premium =
+// tier 3 (fully agentic, best models). Generation is free; each wallet has a
+// set number of games per tier.
 const tierButtons: {
-  tier: 1 | 2 | 3;
+  tier: 1 | 3;
   label: string;
   subtitle: string;
   icon: PixelIconName;
@@ -32,30 +33,21 @@ const tierButtons: {
 }[] = [
   {
     tier: 1,
-    label: "HYBRID",
-    subtitle: "Fast build from a proven template. Best value.",
+    label: "FAST",
+    subtitle: "Quick build from a proven template. Best value.",
     icon: "bolt",
     tone: "phos",
     speed: "FAST",
     perks: ["Proven template base", "Ready in ~2 min"],
   },
   {
-    tier: 2,
-    label: "PRO",
-    subtitle: "Fully AI-built from scratch. Stronger results.",
-    icon: "code",
-    tone: "cyan",
-    speed: "SMART",
-    perks: ["Written from scratch", "Auto-playtested"],
-  },
-  {
     tier: 3,
-    label: "ULTRA",
-    subtitle: "Best models, best game. Premium.",
+    label: "PREMIUM",
+    subtitle: "Best models, built from scratch. Richest game.",
     icon: "crown",
     tone: "amber",
     speed: "BEST",
-    perks: ["Top AI models", "Richest gameplay"],
+    perks: ["Top AI models", "Written from scratch", "Auto-playtested"],
   },
 ];
 import { useStudioContext } from "@/context/StudioContext";
@@ -63,21 +55,10 @@ import { api, clearAuthToken, prefetchAuthToken } from "@/lib/api";
 import { findGameTemplate } from "@/lib/templates-loader";
 import { engineOf } from "@/lib/studio-meta";
 import { useStudioAuth } from "@/hooks/useStudioAuth";
-import { getWalletAddress } from "@/lib/identity";
-import { useDogeWallet } from "@/lib/useDogeWallet";
-import { formatZeroGShortfall, hasSufficientZeroGBalance } from "@/lib/zeroGSubscriptionCheckout";
-import { isWalletLinkedOnSession } from "@/lib/walletLink";
-import { getWalletErrorPresentation, isWalletUserAbort } from "@/lib/walletErrors";
-import { parseHumanZeroGAmount } from "@/lib/zeroGChain";
 import { CreatePageSkeleton } from "@/components/studio/PageSkeletons";
 import { ConsoleChatMessages } from "@/components/studio/ConsoleChatMessages";
 import { CreateConsolePanel } from "@/components/studio/CreateConsolePanel";
-import { DogeOSWalletPanel } from "@/components/dogeos/DogeOSWalletPanel";
 import { useCreateChatFlow } from "@/hooks/useCreateChatFlow";
-import {
-  fetchCreatorSubscriptionTiers,
-  purchaseCreatorSubscription,
-} from "@/lib/api/creatorSubscription";
 import {
   fetchGenerationQuota,
   tierQuotaHint,
@@ -99,21 +80,6 @@ export const Route = createFileRoute("/_app/create")({
   component: Create,
 });
 
-type PaymentChoiceBase = {
-  tier: 1 | 2 | 3;
-  buildPrompt: string;
-  subscriptionTier?: 1 | 2;
-  subscriptionName?: string;
-  subscriptionPrice0G?: string;
-  walletRequired?: boolean;
-  chainMethod: "0g";
-  chainAmount: number;
-  chainCurrency: string;
-};
-type PaymentChoice =
-  | (PaymentChoiceBase & { billingMode: "subscription" })
-  | (PaymentChoiceBase & { billingMode: "legacy" });
-
 const steps = [
   "Submitting prompt",
   "Writing game code",
@@ -126,8 +92,6 @@ const CREATE_STEPS = [
   { label: "Build", note: "play & publish" },
 ];
 
-const PENDING_CHAIN_GENERATION_PAYMENT_KEY = "dogegame-pending-chain-generation-payment";
-
 const stageToStep: Record<string, number> = {
   "writing-code": 1,
   "editing-seed": 1,
@@ -139,14 +103,6 @@ const stageToStep: Record<string, number> = {
 function Create() {
   const { studio, addCreatedGame, removeCreatedGame } = useStudioContext();
   const { ready: authReady, authenticated, user, openLogin, syncWalletIdentity } = useStudioAuth();
-  const {
-    ensureEvmWallet,
-    getEthereumProvider,
-    sendZeroGGenerationPayment,
-    addZeroGFunds,
-    readZeroGBalance,
-    linkWalletOnZeroGChain,
-  } = useDogeWallet();
   const navigate = useNavigate();
   const [templateSeed, setTemplateSeed] = useState<any | null>(null);
   const chat = useCreateChatFlow({
@@ -171,21 +127,12 @@ function Create() {
   } = chat;
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const [generationNotice, setGenerationNotice] = useState("");
-  const [generationNoticeKind, setGenerationNoticeKind] = useState<"info" | "payment" | "error">(
-    "info",
-  );
-  const [isPaying, setIsPaying] = useState(false);
-  const [isFundingWallet, setIsFundingWallet] = useState(false);
+  const [generationNoticeKind, setGenerationNoticeKind] = useState<"info" | "error">("info");
   const [publishingGame, setPublishingGame] = useState(false);
   const [isEnhancingPrompt, setIsEnhancingPrompt] = useState(false);
   const [enhancedPromptDraft, setEnhancedPromptDraft] = useState("");
-  // When a 2nd+ game needs payment, we hold the pending build here and let the
-  // user confirm the 0G payment instead of auto-charging.
-  const [paymentChoice, setPaymentChoice] = useState<PaymentChoice | null>(null);
-  const [subscriptionFunded, setSubscriptionFunded] = useState<boolean | null>(null);
   const [generationQuota, setGenerationQuota] = useState<GenerationQuota | null>(null);
   const noticeRef = useRef<HTMLDivElement>(null);
-  const subscriptionCheckoutKeyRef = useRef<string | null>(null);
 
   // The build itself lives in studio state + localStorage (dogegame-active-build),
   // so it survives navigating away and full page refreshes. This page only
@@ -251,7 +198,7 @@ function Create() {
         { role: "assistant", text: heroPrompt },
         {
           role: "assistant",
-          text: "Plan ready! Choose Hybrid Mode or Pure Agent Strategy below to start building.",
+          text: "Plan ready! Choose Fast or Premium below to start building.",
         },
       ]);
     }
@@ -275,7 +222,7 @@ function Create() {
   const step =
     phase === "building" ? (stageToStep[activeBuild?.progressStage ?? ""] ?? 0) : steps.length - 1;
 
-  const showNotice = (message: string, kind: "info" | "payment" | "error" = "info") => {
+  const showNotice = (message: string, kind: "info" | "error" = "info") => {
     setGenerationNotice(message);
     setGenerationNoticeKind(kind);
     requestAnimationFrame(() => {
@@ -295,10 +242,7 @@ function Create() {
     if (phase !== "failed") return;
     const statusText = activeBuild?.statusText ?? studio.agentStatus ?? "";
     if (!statusText) return;
-    if (/free game|0G|payment required|subscription|required|generate another/i.test(statusText)) {
-      setGenerationNotice(statusText);
-      setGenerationNoticeKind("payment");
-    } else if (!generationNotice) {
+    if (!generationNotice) {
       setGenerationNotice(statusText);
       setGenerationNoticeKind("error");
     }
@@ -312,176 +256,7 @@ function Create() {
       .catch(() => setGenerationQuota(null));
   }, [authReady, authenticated, phase, activeBuild?.game?.id]);
 
-  useEffect(() => {
-    if (!paymentChoice || paymentChoice.billingMode !== "subscription") {
-      setSubscriptionFunded(null);
-      return;
-    }
-    let cancelled = false;
-    void readZeroGBalance()
-      .then((balance) => {
-        if (cancelled) return;
-        setSubscriptionFunded(
-          hasSufficientZeroGBalance(balance, paymentChoice.subscriptionPrice0G),
-        );
-      })
-      .catch(() => {
-        if (!cancelled) setSubscriptionFunded(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [paymentChoice, readZeroGBalance]);
-
-  const formatPaidGenerationNotice = (error: any) => {
-    const data = error?.response?.data;
-    const payment = data?.payment;
-    const amount = payment?.amount ?? 1;
-    const currency = payment?.currency ?? "0G";
-    const existing = Number(payment?.existingGames ?? 0);
-    const serverError = String(data?.error ?? "").trim();
-    if (data?.code === "SUBSCRIPTION_REQUIRED" || data?.code === "GENERATION_QUOTA_EXCEEDED") {
-      return (
-        serverError || `${data?.subscription?.requiredTierName ?? "A subscription"} is required.`
-      );
-    }
-    if (data?.code === "PAID_GENERATION_REQUIRED") {
-      return (
-        serverError ||
-        `You've already created your free game${existing > 0 ? ` (${existing} so far)` : ""}. Pay ${amount} ${currency} to generate another.`
-      );
-    }
-    return serverError || error?.message || "Could not start generation.";
-  };
-
-  type SubscriptionPaymentChoice = Extract<
-    NonNullable<typeof paymentChoice>,
-    { billingMode: "subscription" }
-  >;
-
-  const showWalletNotice = (error: unknown, action = "subscribe with 0G") => {
-    const { message, kind } = getWalletErrorPresentation(error, { action });
-    showNotice(message, kind);
-  };
-
-  const checkoutSubscription = async (
-    choice: SubscriptionPaymentChoice,
-    options?: { auto?: boolean },
-  ): Promise<"subscribed" | "needs_funds" | "needs_wallet" | "cancelled"> => {
-    await ensureEvmWallet();
-    await syncWalletIdentity();
-
-    const wallet = getWalletAddress();
-    if (!wallet) {
-      setPaymentChoice({ ...choice, walletRequired: true });
-      if (!options?.auto) {
-        showNotice("Connect your DogeOS wallet, then confirm the subscription.", "payment");
-      }
-      return "needs_wallet";
-    }
-
-    setPaymentChoice({ ...choice, walletRequired: false });
-
-    if (!isWalletLinkedOnSession(wallet)) {
-      showNotice("Approve the DogeOS sign-in signature in your wallet to continue.", "payment");
-      await linkWalletOnZeroGChain();
-    }
-
-    const balance = await readZeroGBalance();
-    const funding = formatZeroGShortfall(balance, choice.subscriptionPrice0G);
-    if (!funding.sufficient) {
-      showNotice(
-        `You have ${funding.balanceLabel} but ${choice.subscriptionName ?? "this plan"} costs ${funding.priceLabel}. Top up, then confirm the subscription.`,
-        "payment",
-      );
-      return "needs_funds";
-    }
-
-    showNotice(
-      `Opening your wallet — confirm ${choice.subscriptionName ?? "Creator subscription"} for ${funding.priceLabel}.`,
-      "payment",
-    );
-    try {
-      await purchaseCreatorSubscription(choice.subscriptionTier ?? 1, 1, getEthereumProvider);
-    } catch (error) {
-      if (isWalletUserAbort(error)) return "cancelled";
-      throw error;
-    }
-    return "subscribed";
-  };
-
-  type LegacyPaymentChoice = Extract<NonNullable<typeof paymentChoice>, { billingMode: "legacy" }>;
-
-  const legacyCheckoutKeyRef = useRef<string | null>(null);
-
-  const runLegacyPayThenBuild = async (choice: LegacyPaymentChoice) => {
-    try {
-      if (choice.chainMethod === "0g" && choice.chainAmount <= 0) {
-        setIsPaying(true);
-        await ensureEvmWallet();
-        await syncWalletIdentity();
-        const wallet = getWalletAddress();
-        if (!wallet) {
-          showNotice("Connect your DogeOS wallet to continue.", "payment");
-          return;
-        }
-        if (!isWalletLinkedOnSession(wallet)) {
-          showNotice("Approve the DogeOS sign-in signature in your wallet to continue.", "payment");
-          await linkWalletOnZeroGChain();
-        }
-        showNotice("Signed in. Starting your Hybrid build…", "info");
-        setPaymentChoice(null);
-        const game = await studio.generateFromPrompt(choice.tier, choice.buildPrompt, {
-          method: "0g",
-        });
-        if (game) addCreatedGame(game);
-        setGenerationNotice("");
-        return;
-      }
-
-      await payWithChain(choice);
-    } catch (error: unknown) {
-      if (isWalletUserAbort(error)) return;
-      showWalletNotice(error, "pay for this game");
-    } finally {
-      setIsPaying(false);
-    }
-  };
-
-  const runSubscriptionThenBuild = async (choice: SubscriptionPaymentChoice) => {
-    try {
-      const result = await checkoutSubscription(choice);
-      if (result !== "subscribed") {
-        if (result === "cancelled") {
-          showNotice(
-            "Subscription not completed. Open your wallet and approve the 10 0G payment, then click Subscribe again.",
-            "payment",
-          );
-        }
-        return;
-      }
-    } catch (error) {
-      showWalletNotice(error, "subscribe with 0G");
-      return;
-    }
-    showNotice("Subscription active. Starting your game build…", "info");
-    setPaymentChoice(null);
-    setGenerationNotice("");
-    try {
-      const game = await studio.generateFromPrompt(choice.tier, choice.buildPrompt);
-      if (game) addCreatedGame(game);
-    } catch (error: any) {
-      showNotice(
-        error?.response?.data?.error ??
-          error?.message ??
-          "Subscription succeeded but the build could not start.",
-        "error",
-      );
-      throw error;
-    }
-  };
-
-  const build = async (tier: 1 | 2 | 3, promptOverride = "") => {
+  const build = async (tier: 1 | 3, promptOverride = "") => {
     if (!requireLogin()) return;
     const pendingInput = chatInput.trim();
     const promptWithPendingInput = [finalPrompt || chatPrompt || studio.prompt, pendingInput]
@@ -491,129 +266,21 @@ function Create() {
     if (!buildPrompt.trim() || phase === "building") return;
     setGenerationNotice("");
     setGenerationNoticeKind("info");
-    setPaymentChoice(null);
     try {
-      await ensureEvmWallet();
+      // Building needs only the sign-in session (checked by requireLogin).
       await syncWalletIdentity();
       const game = await studio.generateFromPrompt(tier, buildPrompt);
       if (game) addCreatedGame(game);
     } catch (error: any) {
-      const payment = error?.response?.data?.payment;
-      const isPaidRequired =
-        error?.response?.status === 402 &&
-        (error?.response?.data?.code === "PAID_GENERATION_REQUIRED" || Boolean(payment?.required));
-      const isWalletRequired =
-        error?.response?.status === 402 &&
-        error?.response?.data?.code === "EVM_WALLET_REQUIRED";
-      const subscription = error?.response?.data?.subscription;
-      const isSubscriptionRequired =
-        error?.response?.status === 402 &&
-        (error?.response?.data?.code === "SUBSCRIPTION_REQUIRED" ||
-          error?.response?.data?.code === "GENERATION_QUOTA_EXCEEDED");
-
-      if (isSubscriptionRequired) {
-        const requiredTier = (
-          subscription?.repurchaseTier === 2 || subscription?.requiredTier === 2 ? 2 : 1
-        ) as 1 | 2;
-        const tiers = await fetchCreatorSubscriptionTiers().catch(() => null);
-        const plan = tiers?.tiers?.find((item) => item.tier === requiredTier);
-        const choice: SubscriptionPaymentChoice = {
-          tier,
-          buildPrompt,
-          billingMode: "subscription",
-          subscriptionTier: requiredTier,
-          subscriptionName: plan?.name ?? subscription?.requiredTierName,
-          subscriptionPrice0G: plan?.price0G,
-          walletRequired: Boolean(subscription?.walletRequired),
-          chainMethod: "0g",
-          chainAmount: 0,
-          chainCurrency: "0G",
-        };
-        setPaymentChoice(choice);
-        showNotice(
-          subscription?.walletRequired
-            ? "Sign in with your DogeOS wallet, then confirm your Creator subscription."
-            : `Confirm ${plan?.name ?? subscription?.requiredTierName ?? "your Creator subscription"} in your wallet to continue.`,
-          "payment",
-        );
-        const checkoutKey = `${tier}:${buildPrompt}`;
-        if (subscriptionCheckoutKeyRef.current !== checkoutKey) {
-          subscriptionCheckoutKeyRef.current = checkoutKey;
-          void runSubscriptionThenBuild(choice).catch((checkoutError: unknown) => {
-            if (isWalletUserAbort(checkoutError)) return;
-            showWalletNotice(checkoutError, "subscribe with 0G");
-          });
-        }
-      } else if (isPaidRequired || isWalletRequired) {
-        const chain = payment?.methods?.["0g"] ?? payment?.methods?.chain;
-        let chainAmount = 0;
-        try {
-          chainAmount = Number(parseHumanZeroGAmount(chain?.amount ?? payment?.amount ?? 0));
-        } catch (amountError: unknown) {
-          showNotice(
-            amountError instanceof Error
-              ? amountError.message
-              : "Invalid payment amount from server. Refresh and try again.",
-            "error",
-          );
-          return;
-        }
-        const tierLabel = tier === 1 ? "Hybrid" : tier === 2 ? "Pro" : "Ultra";
-        const choice: LegacyPaymentChoice = {
-          tier,
-          buildPrompt,
-          billingMode: "legacy",
-          chainMethod: "0g",
-          chainAmount,
-          chainCurrency: "0G",
-        };
-        setPaymentChoice(choice);
-
-        if (chainAmount <= 0 || isWalletRequired) {
-          showNotice(
-            `Sign in with your DogeOS wallet to start ${tierLabel} (no payment for this tier).`,
-            "payment",
-          );
-        } else {
-          showNotice(
-            `Confirm ${chainAmount} 0G in your DogeOS wallet to build with ${tierLabel}.`,
-            "payment",
-          );
-        }
-        const checkoutKey = `${tier}:${buildPrompt}:${chainAmount}`;
-        if (legacyCheckoutKeyRef.current !== checkoutKey) {
-          legacyCheckoutKeyRef.current = checkoutKey;
-          void runLegacyPayThenBuild(choice);
-        }
-      } else {
-        const serverError = String(error?.response?.data?.error ?? error?.message ?? "").trim();
-        if (error?.response?.status === 401 || /authorization token/i.test(serverError)) {
-          clearAuthToken();
-          void prefetchAuthToken();
-          showNotice("Sign in with your DogeOS wallet, then try building again.", "error");
-          return;
-        }
-        showNotice(formatPaidGenerationNotice(error), "error");
+      const serverError = String(error?.response?.data?.error ?? error?.message ?? "").trim();
+      if (error?.response?.status === 401 || /authorization token/i.test(serverError)) {
+        clearAuthToken();
+        void prefetchAuthToken();
+        showNotice("Sign in with your DogeOS wallet, then try building again.", "error");
+        return;
       }
-    }
-  };
-
-  const topUpZeroGWallet = async () => {
-    const amount = String(paymentChoice?.chainAmount || paymentChoice?.subscriptionPrice0G || "10");
-    try {
-      setIsFundingWallet(true);
-      await ensureEvmWallet();
-      await addZeroGFunds();
-      showNotice(
-        `Your DogeOS wallet address is copied — send at least ${amount} 0G to it on 0G mainnet, then continue.`,
-        "payment",
-      );
-    } catch (error: any) {
-      if (!/cancel/i.test(String(error?.message ?? ""))) {
-        showNotice(error?.message ?? "Could not copy your wallet address.", "error");
-      }
-    } finally {
-      setIsFundingWallet(false);
+      // Includes the "used all free games" limit (GENERATION_LIMIT_REACHED).
+      showNotice(serverError || "Could not start generation.", "error");
     }
   };
 
@@ -632,91 +299,6 @@ function Create() {
       );
     } finally {
       setPublishingGame(false);
-    }
-  };
-
-  const subscribeAndBuild = async () => {
-    if (!paymentChoice || paymentChoice.billingMode !== "subscription" || isPaying) return;
-    const choice = paymentChoice;
-    try {
-      setIsPaying(true);
-      subscriptionCheckoutKeyRef.current = null;
-      await runSubscriptionThenBuild(choice);
-    } catch (error: unknown) {
-      if (isWalletUserAbort(error)) return;
-      showWalletNotice(error, "subscribe with 0G");
-    } finally {
-      setIsPaying(false);
-    }
-  };
-
-  const payWithChain = async (choiceOverride?: LegacyPaymentChoice) => {
-    const choice = choiceOverride ?? paymentChoice;
-    if (!choice || isPaying) return;
-    const { tier, buildPrompt, chainAmount, chainCurrency } = choice;
-    setPaymentChoice(null);
-    try {
-      setIsPaying(true);
-      let paymentTxHash = sessionStorage.getItem(PENDING_CHAIN_GENERATION_PAYMENT_KEY) ?? "";
-
-      await ensureEvmWallet();
-      await syncWalletIdentity();
-      const wallet = getWalletAddress();
-      if (wallet && !isWalletLinkedOnSession(wallet)) {
-        showNotice("Approve the DogeOS sign-in signature in your wallet to continue.", "payment");
-        await linkWalletOnZeroGChain();
-      }
-
-      if (chainAmount <= 0) {
-        showNotice("Starting your Hybrid build…", "info");
-        const game = await studio.generateFromPrompt(tier, buildPrompt, { method: "0g" });
-        if (game) addCreatedGame(game);
-        setGenerationNotice("");
-        setGenerationNoticeKind("info");
-        return;
-      }
-
-      if (!paymentTxHash) {
-        showNotice(
-          `Confirm ${chainAmount} ${chainCurrency} in your DogeOS wallet (on 0G mainnet) to unlock another game.`,
-          "payment",
-        );
-        await ensureEvmWallet();
-        paymentTxHash = await sendZeroGGenerationPayment(chainAmount);
-        sessionStorage.setItem(PENDING_CHAIN_GENERATION_PAYMENT_KEY, paymentTxHash);
-      }
-      showNotice("Payment sent. Verifying on 0G mainnet…", "info");
-      let game = null;
-      for (let attempt = 1; attempt <= 2; attempt += 1) {
-        try {
-          game = await studio.generateFromPrompt(tier, buildPrompt, {
-            method: "0g",
-            paymentTxHash,
-          });
-          break;
-        } catch (verifyError: any) {
-          const waitingForConfirmation =
-            verifyError?.response?.status === 402 &&
-            verifyError?.response?.data?.code === "PAYMENT_NOT_CONFIRMED";
-          if (!waitingForConfirmation || attempt === 2) throw verifyError;
-          showNotice("Payment sent. Waiting for 0G confirmation…", "info");
-          await new Promise((resolve) => setTimeout(resolve, 5000));
-        }
-      }
-      if (game) addCreatedGame(game);
-      sessionStorage.removeItem(PENDING_CHAIN_GENERATION_PAYMENT_KEY);
-      setGenerationNotice("");
-      setGenerationNoticeKind("info");
-      return;
-    } catch (paymentError: any) {
-      showNotice(
-        paymentError?.response?.data?.error ??
-          paymentError?.message ??
-          "Could not complete payment. Please try again.",
-        "error",
-      );
-    } finally {
-      setIsPaying(false);
     }
   };
 
@@ -754,7 +336,7 @@ function Create() {
     if (!requireLogin()) return;
 
     // First turn the user's short idea into a build-ready specification. Only
-    // after the user can see that prompt do we reveal Hybrid, Pro, and Ultra.
+    // after the user can see that prompt do we reveal Fast and Premium.
     const rawPrompt = instruction;
     setMessages((current) => [...current, { role: "user", text: instruction }]);
     setIsEnhancingPrompt(true);
@@ -780,7 +362,7 @@ function Create() {
         ...current,
         {
           role: "assistant",
-          text: "Your detailed game prompt is ready. Review or edit it below, then choose Hybrid, Pro, or Ultra.",
+          text: "Your detailed game prompt is ready. Review or edit it below, then choose Fast or Premium.",
         },
       ]);
     } catch (error: any) {
@@ -795,7 +377,7 @@ function Create() {
     }
   };
 
-  const startTierBuild = (tier: 1 | 2 | 3) => {
+  const startTierBuild = (tier: 1 | 3) => {
     if (!requireLogin()) return;
     const prompt = [finalPrompt || chatPrompt || studio.prompt, chatInput.trim()]
       .filter(Boolean)
@@ -818,95 +400,11 @@ function Create() {
   const noticePanel = generationNotice ? (
     <div ref={noticeRef} className="scroll-mt-20">
       <Panel
-        tone={
-          generationNoticeKind === "payment"
-            ? "amber"
-            : generationNoticeKind === "error"
-              ? undefined
-              : "cyan"
-        }
-        title={
-          generationNoticeKind === "payment"
-            ? "payment_required"
-            : generationNoticeKind === "error"
-              ? "build_error"
-              : "notice"
-        }
+        tone={generationNoticeKind === "error" ? undefined : "cyan"}
+        title={generationNoticeKind === "error" ? "build_error" : "notice"}
         className={generationNoticeKind === "error" ? "[--panel-line:#6b231e]" : ""}
       >
         <Notice kind={generationNoticeKind}>{generationNotice}</Notice>
-
-        {generationNoticeKind === "payment" && paymentChoice && (
-          <div className="mt-3 space-y-3">
-            <div className="border-2 border-line bg-ink-1 p-3">
-              <DogeOSWalletPanel showHeading={false} />
-            </div>
-            {paymentChoice.billingMode === "subscription" ? (
-              <div className="grid gap-2">
-                <Btn
-                  variant="magenta"
-                  size="lg"
-                  onClick={() => void subscribeAndBuild()}
-                  disabled={isPaying}
-                  className="h-auto flex-col gap-1 py-3"
-                >
-                  <span>
-                    {paymentChoice.walletRequired
-                      ? "Connect wallet & subscribe"
-                      : subscriptionFunded
-                        ? `Confirm in wallet · ${paymentChoice.subscriptionPrice0G ?? ""} 0G`
-                        : `${paymentChoice.subscriptionName ?? "Subscribe"} · ${paymentChoice.subscriptionPrice0G ?? ""} 0G`}
-                  </span>
-                  <span className="text-[10px] font-bold normal-case tracking-normal opacity-80">
-                    {paymentChoice.walletRequired
-                      ? "Sign in with DogeOS, then confirm the subscription"
-                      : subscriptionFunded
-                        ? "Your balance covers this — approve the transaction"
-                        : "30 days of game generation"}
-                  </span>
-                </Btn>
-                {subscriptionFunded !== true && (
-                  <Btn
-                    variant="cyan"
-                    onClick={() => void topUpZeroGWallet()}
-                    disabled={isFundingWallet || isPaying}
-                  >
-                    {isFundingWallet ? "Copying address…" : "Top up 0G wallet first"}
-                  </Btn>
-                )}
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                <Btn
-                  variant="cyan"
-                  onClick={() => void payWithChain()}
-                  disabled={isPaying}
-                  className="col-span-2 h-auto flex-col gap-0.5 py-2.5"
-                >
-                  <span>
-                    ◆ {paymentChoice.chainAmount} {paymentChoice.chainCurrency}
-                  </span>
-                  <span className="text-[9px] opacity-80">
-                    Pay 0G from your DogeOS wallet
-                  </span>
-                </Btn>
-                <Btn
-                  variant="ghost"
-                  onClick={() => void topUpZeroGWallet()}
-                  disabled={isFundingWallet || isPaying}
-                  className="col-span-2"
-                >
-                  {isFundingWallet ? "Copying address…" : "Top up 0G first"}
-                </Btn>
-              </div>
-            )}
-          </div>
-        )}
-        {generationNoticeKind === "payment" && !paymentChoice && (
-          <p className="mt-2 text-xs text-text-3">
-            Your first game is free. Additional generations require payment.
-          </p>
-        )}
       </Panel>
     </div>
   ) : null;
@@ -954,7 +452,10 @@ function Create() {
             </div>
           </div>
 
-          <ol className="grid grid-cols-3 gap-2 lg:w-[380px] lg:shrink-0" aria-label="Build progress">
+          <ol
+            className="grid grid-cols-3 gap-2 lg:w-[380px] lg:shrink-0"
+            aria-label="Build progress"
+          >
             {CREATE_STEPS.map((step, index) => {
               const state = index < stepIndex ? "done" : index === stepIndex ? "active" : "todo";
               return (
@@ -962,7 +463,8 @@ function Create() {
                   key={step.label}
                   className={cn(
                     "border-2 px-2.5 py-2.5 transition-colors",
-                    state === "active" && "border-doge bg-doge/10 shadow-[0_0_24px_-8px_var(--doge)]",
+                    state === "active" &&
+                      "border-doge bg-doge/10 shadow-[0_0_24px_-8px_var(--doge)]",
                     state === "done" && "border-phos-3 bg-phos/5",
                     state === "todo" && "border-line bg-ink-0/50",
                   )}
@@ -970,7 +472,11 @@ function Create() {
                   <span
                     className={cn(
                       "font-term block text-[26px] leading-none",
-                      state === "active" ? "text-doge" : state === "done" ? "text-phos" : "text-text-3",
+                      state === "active"
+                        ? "text-doge"
+                        : state === "done"
+                          ? "text-phos"
+                          : "text-text-3",
                     )}
                   >
                     {state === "done" ? "✓" : `0${index + 1}`}
@@ -1029,8 +535,8 @@ function Create() {
               />
               {isEnhancingPrompt && (
                 <p className="mt-2.5 font-mono text-[13px] text-amber">
-                  <span className="font-bold text-phos">dogegame-bot ▸</span> <Spinner /> expanding your
-                  idea into a full game spec…
+                  <span className="font-bold text-phos">dogegame-bot ▸</span> <Spinner /> expanding
+                  your idea into a full game spec…
                 </p>
               )}
             </div>
@@ -1109,13 +615,13 @@ function Create() {
                 {phase === "done" || phase === "failed" ? "BUILD ANOTHER" : "SELECT BUILD MODE"}
                 <span className="animate-blink text-phos">_</span>
               </p>
-              <div className="grid gap-2.5 sm:grid-cols-3">
+              <div className="grid gap-2.5 sm:grid-cols-2">
                 {tierButtons.map((t) => (
                   <button
                     key={t.tier}
                     type="button"
                     onClick={() => startTierBuild(t.tier)}
-                    disabled={isPaying || !hasBuildPrompt}
+                    disabled={!hasBuildPrompt}
                     className="tier-card group flex min-h-[150px] flex-col border-2 border-line p-3.5 text-left disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ ["--tier" as string]: TONE_VAR[t.tone] }}
                   >
@@ -1129,7 +635,7 @@ function Create() {
                       <Tag tone={t.tone}>{t.speed}</Tag>
                     </span>
                     <span className="mt-3 flex-1 text-[12px] leading-snug text-text-2">
-                      {isPaying && buildingTier === t.tier ? "Waiting for payment..." : t.subtitle}
+                      {t.subtitle}
                     </span>
                     <span className="mt-3 flex items-center justify-between font-mono text-[10px] font-extrabold uppercase tracking-[0.1em]">
                       <span className="text-text-3">

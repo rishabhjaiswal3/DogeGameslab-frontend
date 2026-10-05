@@ -7,8 +7,6 @@ import {
 import { createConfig, http } from "wagmi";
 import { defineChain } from "viem";
 
-import { zeroGMainnet } from "./zeroGChain";
-
 // DogeOS — the app layer for Dogecoin. Users sign in with a DogeOS wallet
 // (embedded email / Google / X wallet, or an external wallet such as MyDoge).
 // Chikyū testnet is the live network today; point these env vars at mainnet
@@ -40,14 +38,12 @@ export const dogeOS = defineChain({
 });
 
 export const dogeOSChain = dogeOS satisfies Chain;
-export const zeroGChain = zeroGMainnet satisfies Chain;
 
-/** Wagmi mirrors the SDK's EVM chains so wagmi hooks follow the DogeOS wallet. */
+/** Wagmi mirrors the SDK's EVM chain so wagmi hooks follow the DogeOS wallet. */
 export const wagmiConfig = createConfig({
-  chains: [dogeOS, zeroGMainnet],
+  chains: [dogeOS],
   transports: {
     [dogeOS.id]: http(DOGEOS_RPC_URL),
-    [zeroGMainnet.id]: http(zeroGMainnet.rpcUrls.default.http[0]),
   },
 });
 
@@ -59,19 +55,19 @@ function appUrl(path = "") {
 export type DogeOSChains = NonNullable<WalletConnectKitConfig["chains"]>;
 
 /**
- * Loads the SDK's own chain list (EVM + Dogecoin + Solana, incl. DogeOS) and
- * adds 0G mainnet, where paid generations settle. Passing only EVM chains would
- * replace the SDK defaults and hide Dogecoin-side wallets such as MyDoge.
+ * Loads the SDK's own chain list (EVM + Dogecoin + Solana) and makes sure DogeOS
+ * is in it. Passing only EVM chains would replace the SDK defaults and hide
+ * Dogecoin-side wallets such as MyDoge.
  */
 export async function loadDogeOSChains(timeoutMs = 6000): Promise<DogeOSChains> {
-  const fallback: DogeOSChains = { evm: [dogeOSChain, zeroGChain] };
+  const fallback: DogeOSChains = { evm: [dogeOSChain] };
   const sdkChains = await Promise.race([
     getChains().catch(() => null),
     new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs)),
   ]);
   if (!sdkChains) return fallback;
   const evm = [...((sdkChains.evm as Chain[] | undefined) ?? [])];
-  for (const chain of [dogeOSChain, zeroGChain]) {
+  for (const chain of [dogeOSChain]) {
     if (!evm.some((existing) => Number(existing.id) === chain.id)) evm.push(chain);
   }
   return { ...sdkChains, evm } as DogeOSChains;
@@ -105,13 +101,26 @@ async function waitForMyDoge(timeoutMs = 1500) {
 }
 
 /**
- * The SDK's wallet list (from getConnectors()), with MyDoge pointed at the
- * globals the installed extension really exposes. Returns undefined to let the
- * SDK load its defaults if the list can't be fetched.
+ * True inside the MyDoge mobile app's browser. There the SDK (4.0.1+) finds the
+ * app's own wallet itself, so the app must not hand it a custom wallet list.
+ */
+function isMyDogeNativeHost() {
+  return (
+    typeof window !== "undefined" &&
+    Object.prototype.hasOwnProperty.call(window, "__mydogeWalletDocumentCapability")
+  );
+}
+
+/**
+ * The SDK's wallet list (from getConnectors()), with the MyDoge browser
+ * extension's `window.doge` account filled in where the SDK did not find it.
+ * Returns undefined — meaning "use the SDK's own list" — inside the MyDoge
+ * mobile app, or if the list can't be fetched.
  */
 export async function loadDogeOSConnectors(
   timeoutMs = 6000,
 ): Promise<DogeOSConnectors | undefined> {
+  if (isMyDogeNativeHost()) return undefined;
   const [list] = await Promise.all([
     Promise.race([
       getConnectors().catch(() => null),
@@ -140,38 +149,41 @@ export async function loadDogeOSConnectors(
   };
   const isMyDoge = (wallet: ProcessedWallet) =>
     wallet.info?.uuid === "mydoge" ||
+    wallet.info?.uuid === "76c06710-5988-80d9-3d01-31e2a716f636" ||
+    wallet.info?.rdns === "inc.tomo.mydoge" ||
     wallet.info?.rdns === "com.mydoge" ||
+    wallet.info?.rdns === "com.mydoge.wallet" ||
     /^mydoge$/i.test(wallet.info?.name ?? "");
 
   const patched = (list as ProcessedWallet[]).map((wallet) => {
     if (!isMyDoge(wallet)) return wallet;
     const connectors = { ...(wallet.connectors ?? {}) };
-    if (evmPath) {
+    const hasProvider = (chain: string) =>
+      Boolean((connectors[chain] as { provider?: unknown } | null | undefined)?.provider);
+    // Only fill in what the SDK did not find; a provider it found is left alone.
+    if (evmPath && !hasProvider("evm")) {
       connectors.evm = {
         provider: resolveWindowPath(evmPath),
         protocol: "inject",
         standard: "eip1193",
       };
-    } else {
-      // No EVM side injected (the current Web Store MyDoge only exposes
-      // `window.doge`): drop it so the SDK connects on the Dogecoin side.
-      delete connectors.evm;
     }
-    if (dogecoinPath) {
+    if (dogecoinPath && !hasProvider("dogecoin")) {
       connectors.dogecoin = {
         provider: resolveWindowPath(dogecoinPath),
         protocol: "inject",
         standard: "normal",
       };
     }
-    // Keep only networks the extension really provides (the registry lists empty
-    // EVM/Solana slots), so MyDoge connects straight to Dogecoin with no picker.
-    for (const [chain, entry] of Object.entries(connectors)) {
-      if (!(entry as { provider?: unknown } | null)?.provider) delete connectors[chain];
+    // Drop the registry's empty slots (networks with no provider), so the
+    // extension's Dogecoin-only account connects straight away with no picker.
+    for (const chain of Object.keys(connectors)) {
+      if (!hasProvider(chain)) delete connectors[chain];
     }
+    const found = Object.keys(connectors).length > 0;
     return {
       ...wallet,
-      isInstalled: Boolean(evmPath || dogecoinPath) || wallet.isInstalled,
+      isInstalled: found || wallet.isInstalled,
       connectors,
     };
   });
@@ -198,7 +210,7 @@ export function buildDogeOSConfig(
       name: APP_NAME,
       description: "Prompt to playable — build and share games on DogeOS.",
       url: appUrl(),
-      icons: [appUrl("brand/icon-192x192.png")],
+      icons: [appUrl("brand/icon-192x192.png?v=3")],
     },
     theme: {
       defaultTheme: theme,
@@ -232,6 +244,13 @@ export async function fetchDogeOSBalance(address: string): Promise<bigint> {
   });
   const payload = (await response.json()) as { result?: string };
   return payload.result ? BigInt(payload.result) : 0n;
+}
+
+/** "0x1234...abcd" — short form of a wallet address for display. */
+export function formatShortAddress(address: string) {
+  const trimmed = address.trim();
+  if (trimmed.length <= 12) return trimmed;
+  return `${trimmed.slice(0, 6)}...${trimmed.slice(-4)}`;
 }
 
 export function dogeOSAddressUrl(address: string) {

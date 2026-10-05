@@ -20,32 +20,13 @@ const PROGRESS_STAGE_LABELS: Record<string, string> = {
   "fixing-runtime": "Testing & fixing the build",
 };
 
-function paidGenerationMessage(error: any) {
-  if (error?.response?.status !== 402) {
-    return null;
-  }
-  if (error?.response?.data?.code === "SUBSCRIPTION_REQUIRED") {
-    const subscription = error.response.data.subscription;
-    return subscription?.walletRequired
-      ? "Your wallet is connected in the app, but the server has not linked it yet. Refresh the page or click Activate with 0G wallet."
-      : `${subscription?.requiredTierName ?? "A Creator subscription"} is required to use this generation mode. Your 0G balance funds the subscription — activate it below.`;
-  }
-  if (error?.response?.data?.code === "GENERATION_QUOTA_EXCEEDED") {
-    return String(error.response.data.error ?? "").trim() || "You've reached your generation limit for this mode. Purchase or renew a Creator plan to continue.";
-  }
-  if (error?.response?.data?.code === "EVM_WALLET_REQUIRED") {
-    return String(error.response.data.error ?? "").trim() || "Connect and link your 0G wallet to continue.";
-  }
-  if (error?.response?.data?.code === "TON_WALLET_REQUIRED") {
-    return String(error.response.data.error ?? "").trim() || "Connect your DogeOS wallet to continue.";
-  }
-  if (error?.response?.data?.code !== "PAID_GENERATION_REQUIRED") return null;
-  const payment = error.response.data.payment;
-  const amount = payment?.amount ?? 1;
-  const currency = payment?.currency ?? "0G";
-  const serverError = String(error.response.data.error ?? "").trim();
-  if (serverError) return serverError;
-  return `You've already used your free game. Generate another for ${amount} ${currency}.`;
+// The only gate on a build is the free-games limit (403 GENERATION_LIMIT_REACHED).
+function generationLimitMessage(error: any) {
+  if (error?.response?.data?.code !== "GENERATION_LIMIT_REACHED") return null;
+  return (
+    String(error.response.data.error ?? "").trim() ||
+    "You've used all your free games for this mode."
+  );
 }
 
 function logGenerationRequest(
@@ -143,11 +124,8 @@ export async function runCodeJob(
 const ACTIVE_BUILD_KEY = "dogegame-active-build";
 const BUILD_NOTIFICATION_PREFIX = "dogegame-build-notified";
 
-export type Tier = 1 | 2 | 3;
-
-// How the user is paying for a 2nd+ game: 0G sent from their DogeOS wallet.
-// A bare string is accepted as a 0G tx-hash.
-export type GenerationPayment = string | { method?: "0g"; paymentTxHash?: string };
+/** Build tier: 1 = Fast, 3 = Premium. */
+export type Tier = 1 | 3;
 
 export type ActiveBuild = {
   tier: Tier;
@@ -596,12 +574,8 @@ export function useCreatorStudio() {
   }, [options, selectedTemplate, themePresets]);
 
   const generateFromPrompt = useCallback(
-    async (tier: Tier = 1, promptOverride = "", payment: GenerationPayment = {}) => {
-      // Accept a bare 0G tx-hash string or a {method, paymentTxHash} descriptor.
-      const payInput = typeof payment === "string" ? { paymentTxHash: payment } : payment;
-      const pay = { method: "0g" as const, ...payInput };
-      const paymentTxHash = pay.paymentTxHash ?? "";
-      // The tier owns the strategy: Tier 1 = hybrid (edit a seed), Tier 2 & 3 =
+    async (tier: Tier = 1, promptOverride = "") => {
+      // The tier owns the strategy: Fast (1) = hybrid (edit a seed), Premium (3) =
       // pure-agent (write from scratch). The backend enforces the same mapping;
       // this local copy only drives client-side pacing and fallbacks.
       const strategy: "hybrid" | "pure-agent" = tier === 1 ? "hybrid" : "pure-agent";
@@ -626,22 +600,17 @@ export function useCreatorStudio() {
       setAgentStatus(`Routing ${strategy === "pure-agent" ? "pure agent" : "hybrid"} request…`);
       setOrchestrationPlan(null);
       setAssetResult(null);
-      if (!paymentTxHash) {
-        try {
-          await api.get("/games/generation-access", {
-            timeout: 60_000,
-            params: { tier, paymentMethod: "0g" },
-          });
-        } catch (error: any) {
-          const paymentMessage = paidGenerationMessage(error);
-          if (paymentMessage) {
-            setStatus("Payment required");
-            setAgentStatus(paymentMessage);
-            // Payment/subscription gates are not failed builds — keep the console clean.
-            updateActiveBuild(null);
-          }
-          throw error;
+      try {
+        await api.get("/games/generation-access", { timeout: 60_000, params: { tier } });
+      } catch (error: any) {
+        const limitMessage = generationLimitMessage(error);
+        if (limitMessage) {
+          setStatus("Free games used");
+          setAgentStatus(limitMessage);
+          // Hitting the limit is not a failed build — keep the console clean.
+          updateActiveBuild(null);
         }
+        throw error;
       }
       // A confident keyword match (e.g. "chess", "racing") — null for vague prompts.
       const localMatch = templateForPrompt(effectivePrompt, gameTemplates);
@@ -726,8 +695,6 @@ export function useCreatorStudio() {
               includeAssets: false,
               strategy,
               tier,
-              ...(pay.method ? { paymentMethod: pay.method } : {}),
-              ...(paymentTxHash ? { paymentTxHash } : {}),
             },
             { timeout: 120_000 },
           );
@@ -761,11 +728,11 @@ export function useCreatorStudio() {
               : "Template ready — generating AI build in the background…",
           );
         } catch (error: any) {
-          const paymentMessage = paidGenerationMessage(error);
-          if (paymentMessage) {
-            logGenerationRequest("routing.payment-required", { strategy, tier }, error);
-            setStatus("Payment required");
-            setAgentStatus(paymentMessage);
+          const limitMessage = generationLimitMessage(error);
+          if (limitMessage) {
+            logGenerationRequest("routing.limit-reached", { strategy, tier }, error);
+            setStatus("Free games used");
+            setAgentStatus(limitMessage);
             updateActiveBuild(null);
             throw error;
           }
@@ -823,8 +790,6 @@ export function useCreatorStudio() {
               refinementLevel: customization,
               strategy,
               tier,
-              ...(pay.method ? { paymentMethod: pay.method } : {}),
-              ...(paymentTxHash ? { paymentTxHash } : {}),
             },
             maxWaitMs,
             (statusText, stage) => {
@@ -874,7 +839,7 @@ export function useCreatorStudio() {
               statusText:
                 strategy === "pure-agent"
                   ? "AI build returned no playable code. The incomplete game was removed."
-                  : "AI build returned no code — the playable Hybrid template was saved.",
+                  : "AI build returned no code — the playable Fast template was saved.",
               game: { id: fallback?.id, templateId: fallback?.templateId, title: fallback?.title },
             });
           }
@@ -893,7 +858,7 @@ export function useCreatorStudio() {
           // Surface the real failure (e.g. "interrupted by a server restart",
           // "insufficient balance") instead of calling everything a timeout.
           const detail =
-            paidGenerationMessage(error) ?? error.response?.data?.error ?? error?.message;
+            generationLimitMessage(error) ?? error.response?.data?.error ?? error?.message;
           const fallback = strategy === "pure-agent" ? playableFallbackGame : baseGame;
           if (strategy === "pure-agent") {
             setGeneratedPackage(fallback);
@@ -924,7 +889,7 @@ export function useCreatorStudio() {
 
   const refineWithAi = useCallback(async () => {
     setStatus("Preparing AI");
-    setPackageMode("Tier 2");
+    setPackageMode("AI build");
     try {
       const refinement = await runCodeJob(
         {
@@ -949,7 +914,7 @@ export function useCreatorStudio() {
         refinement: {
           error: error.response?.data?.error ?? "AI refinement failed",
           promptBundle: {
-            system: "Tier 2 could not reach the configured 0G agent.",
+            system: "The AI build could not reach the configured 0G agent.",
             user: `Refine ${prev.title}. User request: ${prompt}`,
           },
         },

@@ -1,6 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { PageHeader } from "@/components/studio/PageHeader";
-import { ProfileTransactionsPanel } from "@/components/studio/ProfileTransactionsPanel";
 import { GameCard } from "@/components/studio/GameCard";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { type Game } from "@/lib/games-data";
@@ -860,8 +859,6 @@ function Profile() {
             </span>
           </button>
         </div>
-
-        <ProfileTransactionsPanel />
 
         {/* Saves */}
         <section>

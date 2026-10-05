@@ -22,7 +22,7 @@
     "test:e2e": "node tests/e2e/run.mjs"
   },
   "dependencies": {
-    "@dogeos/dogeos-sdk": "4.0.0",
+    "@dogeos/dogeos-sdk": "4.0.1",
     "@hookform/resolvers": "^5.2.2",
     "@posthog/react": "^1.10.3",
     "@radix-ui/react-accordion": "^1.2.12",

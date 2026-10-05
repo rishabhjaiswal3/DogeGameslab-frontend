@@ -21,6 +21,7 @@ import {
 import { clearWalletIdentity, setWalletIdentity } from "@/lib/identity";
 import { queryClient } from "@/lib/queryClient";
 import { useEvmAccount } from "@/lib/useEvmAccount";
+import { LoadingShell } from "@/components/LoadingShell";
 
 // The SDK injects its own Tailwind build (<style id="__wallet-connect-kit-styles__">)
 // at the END of <head>, so its `.hidden`, `.flex`… would override the app's
@@ -109,8 +110,8 @@ if (!DOGEOS_CLIENT_ID) {
 
 export function DogeOSProvider({ children }: { children: ReactNode }) {
   const theme = useAppTheme();
-  // The SDK's own chain list (EVM + Dogecoin + Solana) plus 0G. Loaded once
-  // before the SDK starts; it falls back to DogeOS + 0G if loading stalls.
+  // The SDK's own chain list (EVM + Dogecoin + Solana). Loaded once before the
+  // SDK starts; it falls back to DogeOS alone if loading stalls.
   const [chains, setChains] = useState<DogeOSChains | null>(null);
   const [connectors, setConnectors] = useState<DogeOSConnectors | undefined>(undefined);
   useEffect(() => {
@@ -133,7 +134,9 @@ export function DogeOSProvider({ children }: { children: ReactNode }) {
     return next.clientId ? next : { ...next, clientId: MISSING_CLIENT_ID };
   }, [chains, connectors, theme]);
 
-  if (!chains) return null;
+  // Keep the loading screen up while the wallet list loads; an empty page here
+  // showed as a blank flash between the loader and the app.
+  if (!chains) return <LoadingShell />;
 
   return (
     <WagmiProvider config={wagmiConfig}>

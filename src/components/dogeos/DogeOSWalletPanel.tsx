@@ -1,5 +1,5 @@
 import { DogeIcon, DogeOSWordmark } from "@/components/dogeos/DogeBrand";
-import { Check, Copy, ExternalLink, Loader2, Plus, RefreshCw } from "lucide-react";
+import { Check, Copy, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { PixelIcon } from "@/components/term/PixelIcon";
@@ -10,20 +10,18 @@ import {
   DOGEOS_IS_TESTNET,
   dogeOSAddressUrl,
   formatDogeAmount,
+  formatShortAddress,
 } from "@/lib/dogeos";
 import { useDogeWallet, type DogecoinBalance } from "@/lib/useDogeWallet";
 import { cn } from "@/lib/utils";
-import { formatZeroGAddress } from "@/lib/zeroGChain";
 
 type DogeOSWalletPanelProps = {
   className?: string;
-  onFunded?: () => void;
   showHeading?: boolean;
 };
 
 type Balances = {
   doge: bigint | null;
-  zeroG: bigint | null;
   dogecoin: DogecoinBalance | null;
 };
 
@@ -43,9 +41,9 @@ function BalanceTile({
   amount: string | null;
   unit: string;
   hint: string;
-  tone: "doge" | "amber" | "cyan";
+  tone: "doge" | "cyan";
 }) {
-  const color = tone === "doge" ? "text-doge" : tone === "amber" ? "text-amber" : "text-cyan";
+  const color = tone === "doge" ? "text-doge" : "text-cyan";
   return (
     <div className="min-w-0 border-2 border-line bg-ink-0 px-3 py-2.5">
       <p className="label-term truncate text-text-3">{label}</p>
@@ -60,11 +58,7 @@ function BalanceTile({
   );
 }
 
-export function DogeOSWalletPanel({
-  className = "",
-  onFunded,
-  showHeading = true,
-}: DogeOSWalletPanelProps) {
+export function DogeOSWalletPanel({ className = "", showHeading = true }: DogeOSWalletPanelProps) {
   const {
     walletAddress,
     walletName,
@@ -72,12 +66,10 @@ export function DogeOSWalletPanel({
     walletLinkedOnSession,
     openWalletModal,
     readDogeOSBalance,
-    readZeroGBalance,
     readDogecoinBalance,
-    addZeroGFunds,
-    linkWalletOnZeroGChain,
+    ensureSignedIn,
   } = useDogeWallet();
-  const [balances, setBalances] = useState<Balances>({ doge: null, zeroG: null, dogecoin: null });
+  const [balances, setBalances] = useState<Balances>({ doge: null, dogecoin: null });
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -86,14 +78,13 @@ export function DogeOSWalletPanel({
   const refreshBalance = useCallback(async () => {
     if (!walletAddress) return;
     setLoadingBalance(true);
-    const [doge, zeroG, dogecoin] = await Promise.all([
+    const [doge, dogecoin] = await Promise.all([
       readDogeOSBalance().catch(() => null),
-      readZeroGBalance().catch(() => null),
       readDogecoinBalance().catch(() => null),
     ]);
-    setBalances({ doge, zeroG, dogecoin });
+    setBalances({ doge, dogecoin });
     setLoadingBalance(false);
-  }, [readDogeOSBalance, readDogecoinBalance, readZeroGBalance, walletAddress]);
+  }, [readDogeOSBalance, readDogecoinBalance, walletAddress]);
 
   useEffect(() => {
     void refreshBalance();
@@ -114,24 +105,13 @@ export function DogeOSWalletPanel({
     try {
       setSigningIn(true);
       setNotice("Confirm the sign-in signature in your DogeOS wallet…");
-      await linkWalletOnZeroGChain();
+      await ensureSignedIn();
       setNotice("");
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Could not sign in.";
       setNotice(/cancel|reject|denied/i.test(message) ? "" : message);
     } finally {
       setSigningIn(false);
-    }
-  };
-
-  const addZeroG = async () => {
-    try {
-      await addZeroGFunds();
-      setNotice("Address copied — send 0G on 0G mainnet to it. Balances refresh in a minute.");
-      onFunded?.();
-      window.setTimeout(() => void refreshBalance(), 30_000);
-    } catch (error: unknown) {
-      setNotice(error instanceof Error ? error.message : "Could not copy your address.");
     }
   };
 
@@ -176,7 +156,9 @@ export function DogeOSWalletPanel({
         </div>
       )}
 
-      <div className="mt-3 grid grid-cols-2 gap-2">
+      <div
+        className={cn("mt-3 grid gap-2", dogecoinTotal !== null ? "grid-cols-2" : "grid-cols-1")}
+      >
         <BalanceTile
           label="DOGE · DogeOS"
           amount={balances.doge === null ? null : formatDogeAmount(balances.doge)}
@@ -184,23 +166,14 @@ export function DogeOSWalletPanel({
           hint={DOGEOS_IS_TESTNET ? "Chikyū testnet" : "DogeOS mainnet"}
           tone="doge"
         />
-        <BalanceTile
-          label="0G · payments"
-          amount={balances.zeroG === null ? null : formatDogeAmount(balances.zeroG)}
-          unit="0G"
-          hint="Pays for generations"
-          tone="amber"
-        />
         {dogecoinTotal !== null && (
-          <div className="col-span-2">
-            <BalanceTile
-              label="Dogecoin · L1"
-              amount={formatDogeAmount(dogecoinTotal, 8)}
-              unit="DOGE"
-              hint="Your Dogecoin wallet balance"
-              tone="cyan"
-            />
-          </div>
+          <BalanceTile
+            label="Dogecoin · L1"
+            amount={formatDogeAmount(dogecoinTotal, 8)}
+            unit="DOGE"
+            hint="Your Dogecoin wallet balance"
+            tone="cyan"
+          />
         )}
       </div>
 
@@ -214,7 +187,7 @@ export function DogeOSWalletPanel({
           <span className="min-w-0">
             <span className="label-term block text-text-3">Wallet address</span>
             <span className="mt-0.5 block truncate font-mono text-sm font-bold text-text">
-              {formatZeroGAddress(walletAddress)}
+              {formatShortAddress(walletAddress)}
             </span>
           </span>
           <span
@@ -254,16 +227,10 @@ export function DogeOSWalletPanel({
         </Btn>
       )}
 
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <Btn variant="primary" onClick={() => void addZeroG()}>
-          <Plus className="size-4" strokeWidth={3} />
-          Add 0G
-        </Btn>
-        <Btn variant="ghost" onClick={openWalletModal}>
-          <PixelIcon name="wallet" size={13} />
-          Manage
-        </Btn>
-      </div>
+      <Btn variant="ghost" className="mt-3 w-full" onClick={openWalletModal}>
+        <PixelIcon name="wallet" size={13} />
+        Manage wallet
+      </Btn>
 
       {DOGEOS_IS_TESTNET && (
         <a
@@ -277,8 +244,8 @@ export function DogeOSWalletPanel({
       )}
 
       <p className="mt-3 text-[11px] leading-relaxed text-text-3">
-        <span className="text-doge">&gt;</span> Your DogeOS wallet is your account. Paid generations
-        are settled in 0G — your wallet switches to 0G mainnet when you pay.
+        <span className="text-doge">&gt;</span> Your DogeOS wallet is your account. Creating and
+        editing games is free — nothing is charged to your wallet.
       </p>
 
       {notice && (

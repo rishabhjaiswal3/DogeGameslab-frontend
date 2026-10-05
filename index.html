@@ -12,6 +12,17 @@
         }
       } catch (e) {}
     </script>
+    <style>
+      /* Page colour before any stylesheet loads, so loading never flashes white. */
+      html,
+      body {
+        background-color: #080c0f;
+      }
+      html[data-theme="light"],
+      html[data-theme="light"] body {
+        background-color: #f1ede2;
+      }
+    </style>
     <title>DogeGameLab</title>
     <meta
       name="description"
@@ -25,10 +36,10 @@
     />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary" />
-    <meta property="og:image" content="/brand/icon-192x192.png" />
-    <link rel="icon" type="image/png" sizes="48x48" href="/brand/favicon-48x48.png" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/brand/icon-192x192.png" />
-    <link rel="apple-touch-icon" sizes="256x256" href="/brand/apple-touch-icon-256x256.png" />
+    <meta property="og:image" content="/brand/icon-192x192.png?v=3" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/brand/favicon-48x48.png?v=3" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/brand/icon-192x192.png?v=3" />
+    <link rel="apple-touch-icon" sizes="256x256" href="/brand/apple-touch-icon-256x256.png?v=3" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

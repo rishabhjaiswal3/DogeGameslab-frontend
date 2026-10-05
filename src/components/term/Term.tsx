@@ -312,11 +312,10 @@ export function EmptyState({
   );
 }
 
-export type NoticeKind = "info" | "payment" | "error" | "ok";
+export type NoticeKind = "info" | "error" | "ok";
 
 const NOTICE_STYLE: Record<NoticeKind, { tone: Tone; label: string }> = {
   info: { tone: "cyan", label: "INFO" },
-  payment: { tone: "amber", label: "PAYMENT" },
   error: { tone: "danger", label: "ERROR" },
   ok: { tone: "phos", label: "OK" },
 };

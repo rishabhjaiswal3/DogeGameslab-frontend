@@ -42,7 +42,7 @@ export function AccountControls({ collapsed }: { collapsed: boolean }) {
         <DialogContent className="max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-md overflow-y-auto p-0">
           <DialogTitle className="px-titlebar">dogeos_wallet.sys</DialogTitle>
           <DialogDescription className="sr-only">
-            View your DOGE and 0G balances, copy your address, or add funds.
+            View your DOGE balance and copy your address.
           </DialogDescription>
           <div className="p-4 sm:p-5">
             <DogeOSWalletPanel />

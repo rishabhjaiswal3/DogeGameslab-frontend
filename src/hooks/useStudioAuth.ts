@@ -17,7 +17,7 @@ export function useStudioAuth() {
   const { isConnected, isConnecting, connectionStatus, error, openModal, disconnect } =
     useWalletConnect();
   const { accountAddress, walletName } = useEvmAccount();
-  const { linkWalletOnZeroGChain } = useDogeWallet();
+  const { ensureSignedIn } = useDogeWallet();
   const [authStatus, setAuthStatus] = useState<StudioAuthStatus>("idle");
   const signingOutRef = useRef(false);
 
@@ -81,6 +81,6 @@ export function useStudioAuth() {
     openLogin,
     signOut,
     syncWalletIdentity,
-    linkWalletOnZeroGChain,
+    ensureSignedIn,
   };
 }

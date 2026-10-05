@@ -6,7 +6,8 @@ import { DogeGameLogo } from "@/components/studio/DogeGameLogo";
 import { NAV_ITEMS } from "@/components/studio/navItems";
 import { PixelIcon } from "@/components/term/PixelIcon";
 import { PixelSprite } from "@/components/term/PixelSprite";
-import { DogeIcon } from "@/components/dogeos/DogeBrand";
+import { DogeIcon, DogeOSWordmark } from "@/components/dogeos/DogeBrand";
+import { DOGEOS_SITE_URL } from "@/lib/dogeos";
 import { cn } from "@/lib/utils";
 
 function isTypingTarget(target: EventTarget | null) {
@@ -102,9 +103,20 @@ export function Sidebar() {
       <div
         className={cn(
           "flex gap-2 border-t-2 border-line py-3",
-          collapsed ? "flex-col items-center px-2" : "justify-end px-3",
+          collapsed ? "flex-col items-center px-2" : "items-center justify-between px-3",
         )}
       >
+        {!collapsed && (
+          <a
+            href={DOGEOS_SITE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="DogeOS — the app layer for Dogecoin"
+            className="flex min-w-0 items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-text-3 transition-colors hover:text-text-2"
+          >
+            Powered by <DogeOSWordmark height={9} className="text-doge" />
+          </a>
+        )}
         <button
           type="button"
           onClick={() => setSidebarCollapsed(!collapsed)}

@@ -6,6 +6,7 @@ import { Suspense, lazy } from "react";
 import { Buffer } from "buffer";
 import { initDebugConsole } from "./lib/debug";
 import { logBootDiagnostics } from "./lib/bootDiagnostics";
+import { LoadingShell } from "./components/LoadingShell";
 
 logBootDiagnostics();
 
@@ -35,31 +36,6 @@ if (!rootEl) throw new Error("#root not found");
 // Loading it lazily behind Suspense lets the shell paint immediately instead of
 // every route blocking on that one download.
 const App = lazy(() => import("./App"));
-
-// Painted before the stylesheet and fonts arrive, so it is fully inline.
-function LoadingShell() {
-  return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        display: "grid",
-        placeItems: "center",
-        background: "#080c0f",
-        color: "#3dff8f",
-        fontFamily: "ui-monospace, Menlo, monospace",
-        fontSize: 13,
-        letterSpacing: "0.12em",
-      }}
-    >
-      <div>
-        LOADING DOGEGAMELAB
-        <span style={{ animation: "kb 1s steps(1) infinite" }}>█</span>
-      </div>
-      <style>{"@keyframes kb { 50% { opacity: 0; } }"}</style>
-    </div>
-  );
-}
 
 createRoot(rootEl).render(
   <Suspense fallback={<LoadingShell />}>

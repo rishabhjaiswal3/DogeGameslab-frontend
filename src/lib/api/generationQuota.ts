@@ -1,24 +1,10 @@
 import { api } from "../api";
 
+/** Free games per tier for the signed-in wallet. Generation is free; this is the only limit. */
 export type GenerationQuota = {
-  limits: {
-    hybridFree: number;
-    proFree: number;
-    ultraFree: number;
-  };
-  used: {
-    hybrid: number;
-    pro: number;
-    ultra: number;
-  };
-  remaining: {
-    hybridFree: number;
-    proFree: number;
-    ultraFree: number;
-    hybridCredits: number;
-    proCredits: number;
-    ultraCredits: number;
-  };
+  limits: { fast: number; premium: number };
+  used: { fast: number; premium: number };
+  remaining: { fast: number; premium: number };
 };
 
 export async function fetchGenerationQuota(): Promise<GenerationQuota> {
@@ -26,29 +12,16 @@ export async function fetchGenerationQuota(): Promise<GenerationQuota> {
   return data.quota as GenerationQuota;
 }
 
-export function remainingForTier(quota: GenerationQuota | null | undefined, tier: 1 | 2 | 3): number {
+export function remainingForTier(quota: GenerationQuota | null | undefined, tier: 1 | 3): number {
   if (!quota) return 0;
-  if (tier === 1) return quota.remaining.hybridFree + quota.remaining.hybridCredits;
-  if (tier === 2) return quota.remaining.proFree + quota.remaining.proCredits;
-  return quota.remaining.ultraFree + quota.remaining.ultraCredits;
+  return tier === 1 ? quota.remaining.fast : quota.remaining.premium;
 }
 
-export function tierQuotaHint(quota: GenerationQuota | null | undefined, tier: 1 | 2 | 3): string | null {
+export function tierQuotaHint(
+  quota: GenerationQuota | null | undefined,
+  tier: 1 | 3,
+): string | null {
   if (!quota) return null;
-  const free =
-    tier === 1
-      ? quota.remaining.hybridFree
-      : tier === 2
-        ? quota.remaining.proFree
-        : quota.remaining.ultraFree;
-  const paid =
-    tier === 1
-      ? quota.remaining.hybridCredits
-      : tier === 2
-        ? quota.remaining.proCredits
-        : quota.remaining.ultraCredits;
-  if (free > 0 && paid > 0) return `${free} free · ${paid} credits left`;
-  if (free > 0) return `${free} free left`;
-  if (paid > 0) return `${paid} credits left`;
-  return "Subscribe to continue";
+  const left = remainingForTier(quota, tier);
+  return left > 0 ? `${left} free left` : "No free games left";
 }

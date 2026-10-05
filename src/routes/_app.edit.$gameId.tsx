@@ -9,7 +9,6 @@ import { api } from "@/lib/api";
 import { publishGamePackage, unpublishGamePackage } from "@/lib/api/publishGame";
 import { runCodeJob } from "@/hooks/useCreatorStudio";
 import { useStudioAuth } from "@/hooks/useStudioAuth";
-import { useDogeWallet } from "@/lib/useDogeWallet";
 import { useStudioContext } from "@/context/StudioContext";
 import { GamePreview } from "@/components/studio/GamePreview";
 import { EditPageSkeleton } from "@/components/studio/PageSkeletons";
@@ -39,14 +38,6 @@ function GameEditor() {
   const navigate = useNavigate();
   const { createdGames, addCreatedGame, refreshCreatedGames } = useStudioContext();
   const { ready: authReady, user, authenticated } = useStudioAuth();
-  const { sendZeroGGenerationPayment } = useDogeWallet();
-  // When a paid edit needs payment, hold the pending wish + 0G price here until
-  // the user confirms it from their DogeOS wallet.
-  const [editPayment, setEditPayment] = useState<{
-    request: string;
-    amount0G: number;
-  } | null>(null);
-  const [payingEdit, setPayingEdit] = useState(false);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [game, setGame] = useState<any>(null);
@@ -257,13 +248,8 @@ function GameEditor() {
     }
   };
 
-  // Runs one edit against /agents/code, optionally with a payment descriptor.
-  // Returns "PAID_REQUIRED" when the backend gates the edit behind payment so the
-  // caller can ask for the 0G payment.
-  const runEdit = async (
-    request: string,
-    payment: { method?: "0g"; paymentTxHash?: string } = {},
-  ): Promise<"ok" | "empty" | "paid_required" | "error"> => {
+  // Runs one edit against /agents/code. Edits are free.
+  const runEdit = async (request: string): Promise<"ok" | "empty" | "error"> => {
     const token = ++buildToken.current;
     setBuilding(true);
     setLastError(null);
@@ -274,8 +260,6 @@ function GameEditor() {
           request,
           baseCode: game.refinement.generatedCode,
           refinementLevel: "medium",
-          ...(payment.method ? { paymentMethod: payment.method } : {}),
-          ...(payment.paymentTxHash ? { paymentTxHash: payment.paymentTxHash } : {}),
         },
         // Generous: a failed seed-edit now triggers a full pure-agent rebuild,
         // so allow time for both passes before giving up.
@@ -308,25 +292,6 @@ function GameEditor() {
       ]);
       return "empty";
     } catch (error: any) {
-      // Paid-edit gate: ask for the 0G payment instead of failing.
-      const pay = error?.response?.data?.payment;
-      if (
-        error?.response?.status === 402 &&
-        (error?.response?.data?.code === "PAID_EDIT_REQUIRED" || pay?.required)
-      ) {
-        setEditPayment({
-          request,
-          amount0G: Number(pay?.methods?.["0g"]?.amount ?? pay?.amount ?? 0),
-        });
-        setMessages((m) => [
-          ...m,
-          {
-            role: "assistant",
-            text: "This edit needs payment. Pay with 0G from your DogeOS wallet below to apply it.",
-          },
-        ]);
-        return "paid_required";
-      }
       const message = error instanceof Error ? error.message : "unknown error";
       setMessages((m) => [
         ...m,
@@ -343,34 +308,10 @@ function GameEditor() {
 
   const sendWish = async (text: string) => {
     const request = text.trim();
-    if (!request || building || payingEdit || !game?.refinement?.generatedCode) return;
+    if (!request || building || !game?.refinement?.generatedCode) return;
     setWish("");
-    setEditPayment(null);
     setMessages((m) => [...m, { role: "user", text: request }]);
     await runEdit(request);
-  };
-
-  // Pay for the pending edit in 0G from the DogeOS wallet, then apply it.
-  const payEditWith0G = async () => {
-    if (!editPayment || payingEdit || building) return;
-    const { request, amount0G } = editPayment;
-    setPayingEdit(true);
-    try {
-      setBuildStatus(`Confirm ${amount0G} 0G in your DogeOS wallet…`);
-      const paymentTxHash = await sendZeroGGenerationPayment(amount0G);
-      setEditPayment(null);
-      await runEdit(request, { method: "0g", paymentTxHash });
-    } catch (error: any) {
-      setMessages((m) => [
-        ...m,
-        {
-          role: "assistant",
-          text: error?.response?.data?.error ?? error?.message ?? "Could not complete the 0G payment.",
-        },
-      ]);
-    } finally {
-      setPayingEdit(false);
-    }
   };
 
   const fixError = () => {
@@ -410,9 +351,7 @@ function GameEditor() {
         ? "Waiting for the AI build to finish…"
         : building
           ? "Applying your change…"
-          : payingEdit
-            ? "Complete payment to continue"
-            : null;
+          : null;
   const isPublished = game.publish?.published === true;
   const publicUrl = buildPlayUrl(gameId);
 
@@ -548,20 +487,6 @@ function GameEditor() {
               <span className="min-w-0 truncate">ERR: {lastError.message} — tap to fix</span>
             </button>
           )}
-          {editPayment && !building && (
-            <div className="mx-3 mb-2">
-              <Btn
-                variant="cyan"
-                size="sm"
-                onClick={() => void payEditWith0G()}
-                disabled={payingEdit}
-                className="h-auto w-full flex-col py-2"
-              >
-                <span>◆ {editPayment.amount0G} 0G</span>
-                <span className="text-[9px] opacity-80">Pay from your DogeOS wallet</span>
-              </Btn>
-            </div>
-          )}
           <div className="flex gap-2 border-t-2 border-line p-2.5">
             <label className="flex min-w-0 flex-1 items-center gap-2 border-2 border-line-2 bg-ink-0 px-2.5 focus-within:border-phos">
               <span className="font-mono font-bold text-phos">$</span>
@@ -581,7 +506,7 @@ function GameEditor() {
               variant="primary"
               size="icon"
               onClick={() => void sendWish(wish)}
-              disabled={building || payingEdit || !wish.trim() || !isOwner}
+              disabled={building || !wish.trim() || !isOwner}
               aria-label="Send change request"
             >
               <PixelIcon name="send" size={12} />

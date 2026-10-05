@@ -1,4 +1,4 @@
-import { DogeIcon, DogeOSWordmark } from "@/components/dogeos/DogeBrand";
+import { DogeOSIcon, DogeOSWordmark } from "@/components/dogeos/DogeBrand";
 import { DOGEOS_IS_TESTNET, DOGEOS_SITE_URL } from "@/lib/dogeos";
 import { cn } from "@/lib/utils";
 
@@ -21,7 +21,7 @@ export function DogeOSBadge({
         className,
       )}
     >
-      <DogeIcon size={20} className="rounded-full" />
+      <DogeOSIcon size={20} className="rounded-full" />
       {prefix && <span className="shrink-0 text-text-2">{prefix}</span>}
       <DogeOSWordmark height={10} />
       {DOGEOS_IS_TESTNET && <span className="shrink-0 text-text-3">· Chikyū</span>}

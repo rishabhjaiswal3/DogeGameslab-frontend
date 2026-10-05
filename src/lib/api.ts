@@ -83,6 +83,15 @@ export function storeAuthToken(
   }
 }
 
+/** The account (wallet address) the stored studio token belongs to. */
+export function getTokenUserId(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_USER_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export function getTokenEvmWallet(): string | null {
   try {
     const cached = localStorage.getItem(TOKEN_EVM_WALLET_KEY);
