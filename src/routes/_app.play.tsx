@@ -1444,9 +1444,9 @@ function PlayFeed() {
                   <div className="absolute inset-0 z-20 flex flex-col items-center justify-center overflow-hidden bg-ink-0/92 px-6 lg:bottom-[72px]">
                     <div
                       key={gameId}
-                      className="animate-rise relative z-10 w-[min(64vw,260px)] border-2 border-line-2 bg-ink-2 p-1.5 shadow-[6px_6px_0_0_#000]"
+                      className="animate-rise relative z-10 w-[min(78vw,340px)] border-2 border-line-2 bg-ink-2 p-1.5 shadow-[6px_6px_0_0_#000]"
                     >
-                      <div className="scanlines relative aspect-[3/4] overflow-hidden bg-ink-0">
+                      <div className="scanlines relative aspect-[4/3] overflow-hidden bg-ink-0">
                         <GameCoverArtwork
                           game={coverGame}
                           lookupId={coverLookupId}
