@@ -6,15 +6,16 @@ import { CreateConsolePanel } from "@/components/studio/CreateConsolePanel";
 import { DogeOSBadge } from "@/components/dogeos/DogeOSBadge";
 import { PixelSprite } from "@/components/term/PixelSprite";
 import { DogeIcon } from "@/components/dogeos/DogeBrand";
-import { PixelIcon } from "@/components/term/PixelIcon";
+import { LineGamepad, LineRobot, LineRocket, LineTerminal } from "@/components/art/LineIcons";
 import { useTypewriter } from "@/components/term/TypeText";
 import { cn } from "@/lib/utils";
 
+// How a game gets made: four stations on one conveyor, each with its own colour.
 const PIPELINE = [
-  { step: "01", label: "Describe", note: "one line is enough" },
-  { step: "02", label: "AI builds", note: "agents write the code" },
-  { step: "03", label: "Playtest", note: "auto-tested & repaired" },
-  { step: "04", label: "Publish", note: "share a playable link" },
+  { step: "01", label: "Describe", note: "one line is enough", Icon: LineTerminal, color: "var(--phos)" },
+  { step: "02", label: "AI builds", note: "agents write the code", Icon: LineRobot, color: "var(--cyan)" },
+  { step: "03", label: "Playtest", note: "auto-tested & repaired", Icon: LineGamepad, color: "var(--magenta)" },
+  { step: "04", label: "Publish", note: "share a playable link", Icon: LineRocket, color: "var(--amber)" },
 ];
 
 const STAGES: { id: ChatStage; label: string }[] = [
@@ -143,27 +144,55 @@ export function HomeHero({
         </div>
       </div>
 
-      {/* Pipeline */}
-      <ol className="mt-8 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-label="How it works">
-        {PIPELINE.map((item, index) => (
-          <li
-            key={item.step}
-            className="relative flex items-center gap-3 border-2 border-line bg-ink-2 px-3 py-3"
-          >
-            <span className="font-term text-[34px] leading-none text-amber glow-amber">
-              {item.step}
-            </span>
-            <span className="min-w-0">
-              <span className="block font-mono text-[12px] font-extrabold uppercase tracking-[0.1em] text-text">
-                {item.label}
+      {/* Pipeline: four stations joined by a moving conveyor belt */}
+      <ol
+        className="mt-8 grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-0"
+        aria-label="How it works"
+      >
+        {PIPELINE.map(({ step, label, note, Icon, color }, index) => (
+          <li key={step} className="flex min-w-0 items-stretch">
+            <div
+              className="conveyor-step flex min-w-0 flex-1 items-center gap-2.5 border-2 border-line px-2.5 py-3 sm:gap-3 sm:px-3"
+              style={{
+                ["--step" as string]: color,
+                ["--line-accent" as string]: color,
+                ["--delay" as string]: `${index * 1.1}s`,
+              }}
+            >
+              <span
+                aria-hidden="true"
+                className="font-term pointer-events-none absolute -right-1 -top-3 select-none text-[76px] leading-none opacity-[0.08]"
+                style={{ color }}
+              >
+                {step}
               </span>
-              <span className="block truncate text-[11px] text-text-3">{item.note}</span>
-            </span>
+              <span
+                className="conveyor-icon relative grid size-10 shrink-0 place-items-center border-2 text-text sm:size-12"
+                style={{
+                  borderColor: color,
+                  background: `color-mix(in oklab, ${color} 14%, transparent)`,
+                  boxShadow: `0 0 18px color-mix(in oklab, ${color} 22%, transparent)`,
+                }}
+              >
+                <Icon className="size-7 sm:size-8" />
+              </span>
+              <span className="relative min-w-0">
+                <span className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-2">
+                  <span className="font-term text-[22px] leading-none" style={{ color }}>
+                    {step}
+                  </span>
+                  <span className="font-mono text-[11px] font-extrabold uppercase tracking-[0.08em] text-text sm:truncate sm:text-[12px] sm:tracking-[0.1em]">
+                    {label}
+                  </span>
+                </span>
+                <span className="mt-1 block text-[10px] leading-tight text-text-3 sm:truncate sm:text-[11px]">{note}</span>
+              </span>
+            </div>
             {index < PIPELINE.length - 1 && (
-              <PixelIcon
-                name="next"
-                size={10}
-                className="absolute -right-[11px] top-1/2 z-10 hidden -translate-y-1/2 text-phos sm:block"
+              <span
+                aria-hidden="true"
+                className="conveyor-belt hidden w-5 shrink-0 self-center lg:block xl:w-7"
+                style={{ height: 14 }}
               />
             )}
           </li>

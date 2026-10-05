@@ -539,7 +539,9 @@ export function useCreatorStudio() {
       gameTemplates
         .map((t) => ({ ...t, engine: t.engine ?? "threejs" }))
         .filter((t) => t.engine === engine),
-    [engine],
+    // templatesModule: the list arrives after first render and must refresh this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [engine, templatesModule],
   );
 
   useEffect(() => {
@@ -553,7 +555,8 @@ export function useCreatorStudio() {
       filteredTemplates.find((template) => template.id === selectedId) ??
       filteredTemplates[0] ??
       gameTemplates[0],
-    [selectedId, filteredTemplates],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedId, filteredTemplates, templatesModule],
   );
 
   const options = useMemo(
@@ -613,8 +616,11 @@ export function useCreatorStudio() {
         throw error;
       }
       // A confident keyword match (e.g. "chess", "racing") — null for vague prompts.
+      // Wait for the template list itself rather than trusting what this render
+      // captured: a build started before it arrived used to fail here.
+      const gameTemplates = (await loadTemplateModule()).gameTemplates;
       const localMatch = templateForPrompt(effectivePrompt, gameTemplates);
-      const promptTemplate = localMatch ?? selectedTemplate;
+      const promptTemplate = localMatch ?? selectedTemplate ?? gameTemplates[0];
       if (!promptTemplate?.id) {
         const message = "Game templates are still loading. Refresh the page and try again.";
         setStatus("Build failed");
