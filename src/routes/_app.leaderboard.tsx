@@ -21,6 +21,9 @@ import {
   type CreatorScoreEntry,
   type DogeGamePointsEntry,
 } from "@/lib/api/leaderboards";
+import rankDoge1 from "@/assets/rank-doge-1.webp";
+import rankDoge2 from "@/assets/rank-doge-2.webp";
+import rankDoge3 from "@/assets/rank-doge-3.webp";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/leaderboard")({
@@ -94,10 +97,54 @@ function ordinal(n: number) {
   return `${n}${["TH", "ST", "ND", "RD"][n % 10] ?? "TH"}`;
 }
 
-const PODIUM: Record<1 | 2 | 3, { tone: Tone; height: string; order: string; label: string }> = {
-  1: { tone: "amber", height: "min-h-[196px]", order: "order-2", label: "CHAMPION" },
-  2: { tone: "cyan", height: "min-h-[164px]", order: "order-1", label: "RUNNER-UP" },
-  3: { tone: "magenta", height: "min-h-[148px]", order: "order-3", label: "THIRD" },
+type PodiumStyle = {
+  tone: Tone;
+  /** CSS colour variables for this place. */
+  color: string;
+  dim: string;
+  order: string;
+  label: string;
+  medal: string;
+  image: string;
+  /** Pedestal height: the champion stands highest. */
+  pedestal: string;
+  avatar: string;
+};
+
+const PODIUM: Record<1 | 2 | 3, PodiumStyle> = {
+  1: {
+    tone: "amber",
+    color: "var(--amber)",
+    dim: "var(--amber-2)",
+    order: "order-2",
+    label: "CHAMPION",
+    medal: "GOLD",
+    image: rankDoge1,
+    pedestal: "clamp(54px, 9vw, 92px)",
+    avatar: "clamp(64px, 19vw, 128px)",
+  },
+  2: {
+    tone: "cyan",
+    color: "var(--cyan)",
+    dim: "var(--cyan-2)",
+    order: "order-1",
+    label: "RUNNER-UP",
+    medal: "SILVER",
+    image: rankDoge2,
+    pedestal: "clamp(38px, 6.5vw, 64px)",
+    avatar: "clamp(54px, 16vw, 104px)",
+  },
+  3: {
+    tone: "magenta",
+    color: "var(--magenta)",
+    dim: "var(--magenta-2)",
+    order: "order-3",
+    label: "THIRD",
+    medal: "BRONZE",
+    image: rankDoge3,
+    pedestal: "clamp(26px, 4.5vw, 44px)",
+    avatar: "clamp(54px, 16vw, 104px)",
+  },
 };
 
 function Podium({
@@ -127,52 +174,119 @@ function Podium({
       {podiumRows.map((row, index) => {
         const style = PODIUM[row.rank as 1 | 2 | 3] ?? PODIUM[3];
         const isYou = isCurrentUserRow(row, currentUsername, currentWallet);
+        const champion = row.rank === 1;
         return (
           <div
             key={`podium-${row.rank}`}
             className={cn(
-              "animate-rise flex min-w-0 flex-col items-center justify-end border-2 bg-ink-2 px-2 pb-3 pt-4 text-center",
+              "animate-rise flex min-w-0 flex-col items-stretch",
               podiumRows.length === 3 && style.order,
-              style.height,
             )}
-            style={{
-              animationDelay: `${index * 80}ms`,
-              borderColor: `var(--${style.tone === "amber" ? "amber-2" : style.tone === "cyan" ? "cyan-2" : "magenta-2"})`,
-            }}
+            style={{ animationDelay: `${index * 90}ms` }}
           >
-            {row.rank === 1 && <PixelIcon name="crown" size={22} className="mb-1 text-amber" />}
-            <span
-              className={cn(
-                "font-term text-[56px] leading-[0.8] sm:text-[72px]",
-                TONE_TEXT[style.tone],
+            {/* the player: themed Doge, name and score */}
+            <div
+              className="relative flex min-w-0 flex-col items-center overflow-hidden border-2 border-b-0 px-2 pb-3 pt-4 text-center sm:pt-5"
+              style={{
+                borderColor: style.dim,
+                background: `radial-gradient(120% 70% at 50% 0%, color-mix(in srgb, ${style.color} 26%, transparent), transparent 70%), var(--ink-2)`,
+              }}
+            >
+              {champion && (
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-0 top-0 h-full"
+                  style={{
+                    background: `repeating-conic-gradient(from 0deg at 50% 22%, color-mix(in srgb, ${style.color} 14%, transparent) 0deg 8deg, transparent 8deg 20deg)`,
+                    maskImage: "radial-gradient(70% 55% at 50% 22%, #000, transparent 75%)",
+                    WebkitMaskImage: "radial-gradient(70% 55% at 50% 22%, #000, transparent 75%)",
+                  }}
+                />
               )}
-              style={{ textShadow: "0 0 14px currentColor" }}
+              <div className="relative">
+                <img
+                  src={style.image}
+                  alt=""
+                  aria-hidden="true"
+                  draggable={false}
+                  className={cn("block select-none", champion && "animate-bob")}
+                  style={{
+                    width: style.avatar,
+                    height: style.avatar,
+                    borderRadius: "22%",
+                    border: `3px solid ${style.color}`,
+                    boxShadow: `0 0 0 3px var(--ink-0), 0 0 ${champion ? 34 : 22}px color-mix(in srgb, ${style.color} 55%, transparent)`,
+                  }}
+                />
+                <span
+                  className="font-pixel absolute left-1/2 whitespace-nowrap px-1.5 py-1 text-[8px] leading-none sm:text-[9px]"
+                  style={{
+                    bottom: -9,
+                    transform: "translateX(-50%)",
+                    background: style.color,
+                    color: "var(--ink-0)",
+                    boxShadow: "0 2px 0 var(--ink-0)",
+                  }}
+                >
+                  {ordinal(row.rank)}
+                </span>
+              </div>
+              <p
+                className="relative mt-4 flex w-full min-w-0 items-center justify-center gap-1"
+                title={row.name}
+              >
+                <span className="truncate font-mono text-[12px] font-extrabold text-text sm:text-[14px]">
+                  {row.name}
+                </span>
+                {isYou && <Tag tone="phos">you</Tag>}
+              </p>
+              <p className="relative mt-0.5 hidden truncate font-mono text-[10px] text-text-3 sm:block">
+                {compactWallet(row)}
+              </p>
+              <p
+                className={cn(
+                  "font-term relative mt-1.5 text-[24px] leading-none sm:text-[32px]",
+                  isCreator ? "text-amber" : "text-magenta",
+                )}
+                style={{ textShadow: "0 0 12px currentColor" }}
+              >
+                {formatPodiumStat(getScore(row))}
+              </p>
+            </div>
+
+            {/* the step they stand on */}
+            <div
+              className="relative flex items-center justify-center overflow-hidden border-2"
+              style={{
+                height: style.pedestal,
+                borderColor: style.dim,
+                background: `linear-gradient(180deg, color-mix(in srgb, ${style.color} 34%, var(--ink-1)), color-mix(in srgb, ${style.color} 10%, var(--ink-0)))`,
+                boxShadow: `inset 0 3px 0 color-mix(in srgb, ${style.color} 70%, transparent)`,
+              }}
             >
-              {row.rank}
-            </span>
-            <span className={cn("label-term mt-2 hidden sm:block", TONE_TEXT[style.tone])}>
-              {style.label}
-            </span>
-            <p
-              className="mt-2 flex w-full min-w-0 items-center justify-center gap-1"
-              title={row.name}
-            >
-              <span className="truncate font-mono text-[12px] font-extrabold text-text sm:text-[13px]">
-                {row.name}
+              <span
+                aria-hidden="true"
+                className="font-term absolute leading-none"
+                style={{
+                  right: 6,
+                  bottom: -6,
+                  fontSize: `calc(${style.pedestal} * 1.25)`,
+                  color: style.color,
+                  opacity: 0.22,
+                }}
+              >
+                {row.rank}
               </span>
-              {isYou && <Tag tone="phos">you</Tag>}
-            </p>
-            <p className="mt-0.5 hidden truncate font-mono text-[10px] text-text-3 sm:block">
-              {compactWallet(row)}
-            </p>
-            <p
-              className={cn(
-                "font-term mt-1.5 text-[24px] leading-none sm:text-[30px]",
-                isCreator ? "text-amber" : "text-magenta",
-              )}
-            >
-              {formatPodiumStat(getScore(row))}
-            </p>
+              <span
+                className={cn(
+                  "font-pixel relative text-[8px] leading-none tracking-[0.08em] sm:text-[10px]",
+                  TONE_TEXT[style.tone],
+                )}
+              >
+                <span className="sm:hidden">{style.medal}</span>
+                <span className="hidden sm:inline">{style.label}</span>
+              </span>
+            </div>
           </div>
         );
       })}
