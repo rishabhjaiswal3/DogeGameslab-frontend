@@ -1,83 +1,112 @@
 import { useEffect, useState } from "react";
 
+import mark from "@/assets/dogegamelab-mark.webp";
 import mascot from "@/assets/dogegamelab-project.webp";
 
-const STATUS_LINES = [
-  "WAKING UP THE DOGE",
-  "CONNECTING TO DOGEOS",
-  "MOUNTING GAME CARTRIDGES",
-  "WARMING UP BUILD AGENTS",
-  "POLISHING Ð COINS",
+// What the build agents are doing, shown one line at a time like a build log.
+const BUILD_STEPS = [
+  "reading-your-prompt",
+  "drawing-the-doge",
+  "writing-game-code",
+  "wiring-the-controls",
+  "playtesting",
 ];
 
-const BAR_SEGMENTS = 14;
+const BAR_SEGMENTS = 16;
 
-// Small decorations drifting around the mascot: [left %, top %, size px, delay s, kind]
-const FLOATERS: [number, number, number, number, "coin" | "spark" | "pixel"][] = [
-  [-62, 8, 22, 0, "coin"],
-  [150, 2, 16, 0.6, "spark"],
-  [-38, 78, 12, 1.1, "pixel"],
-  [142, 70, 20, 0.3, "coin"],
-  [-78, 46, 14, 1.6, "spark"],
-  [176, 38, 10, 0.9, "pixel"],
+// Bits of "game" flying into the machine while it is built: [text, side, top %, delay s]
+const CHIPS: [string, "l" | "r", number, number][] = [
+  ["{ }", "l", 16, 0],
+  ["</>", "r", 24, 0.5],
+  ["▲", "l", 52, 1.0],
+  ["fn()", "r", 58, 1.5],
+  ["Ð", "l", 82, 2.0],
+  ["★", "r", 86, 2.5],
 ];
 
+// An arcade cabinet is drawn line by line, switches on, and shows the Doge —
+// the app building a game. Everything is in the app's own terminal theme.
 const CSS = `
-@keyframes ls-bob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-10px) } }
-@keyframes ls-halo { 0%,100% { opacity: .55; transform: scale(1) } 50% { opacity: .95; transform: scale(1.08) } }
-@keyframes ls-ring { to { transform: rotate(360deg) } }
-@keyframes ls-float { 0%,100% { transform: translateY(0) rotate(0deg); opacity: .9 } 50% { transform: translateY(-14px) rotate(12deg); opacity: .55 } }
+.ls-machine { position: relative; animation: ls-float 3.2s ease-in-out 1.4s infinite; }
+.ls-cab { width: clamp(170px, 30vw, 270px); height: auto; overflow: visible; display: block; position: relative; }
+.ls-line { fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; stroke-dashoffset: 1; animation: ls-draw 1s ease-out forwards; }
+.ls-guide { stroke-dasharray: 4 6; animation: ls-fade 2.4s ease-out forwards; }
+.ls-screen { animation: ls-on .9s steps(1) .75s both; }
+.ls-screen-glow { animation: ls-glow 2.6s ease-in-out 1.4s infinite; }
+.ls-stick { transform-origin: 78px 222px; animation: ls-stick 1.6s ease-in-out 1.3s infinite; }
+.ls-btn { animation: ls-press 1.2s steps(1) 1.4s infinite; }
+.ls-beam { animation: ls-beam 2.6s ease-in-out 1.1s infinite; }
+.ls-chip { position: absolute; white-space: nowrap; opacity: 0; }
+.ls-chip-l { left: -58%; animation: ls-chip-l 3s ease-in infinite; }
+.ls-chip-r { right: -58%; animation: ls-chip-r 3s ease-in infinite; }
+.ls-below { display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: clamp(22px, 4vh, 38px); animation: ls-rise .6s ease-out .6s both; }
+@keyframes ls-draw { to { stroke-dashoffset: 0 } }
+@keyframes ls-fade { 0% { opacity: 0 } 20% { opacity: .55 } 100% { opacity: .16 } }
+@keyframes ls-on { 0% { opacity: 0 } 8% { opacity: .9 } 16% { opacity: .15 } 26% { opacity: 1 } 34% { opacity: .5 } 42%,100% { opacity: 1 } }
+@keyframes ls-glow { 0%,100% { opacity: .55 } 50% { opacity: 1 } }
+@keyframes ls-stick { 0%,100% { transform: rotate(-14deg) } 50% { transform: rotate(14deg) } }
+@keyframes ls-press { 0%,100% { transform: translateY(0) } 50% { transform: translateY(2.5px) } }
+@keyframes ls-beam { 0% { transform: translateY(0); opacity: 0 } 12% { opacity: .9 } 88% { opacity: .9 } 100% { transform: translateY(268px); opacity: 0 } }
+@keyframes ls-chip-l { 0% { opacity: 0; transform: translateX(0) scale(1) } 15% { opacity: 1 } 80% { opacity: .9 } 100% { opacity: 0; transform: translateX(105%) scale(.4) } }
+@keyframes ls-chip-r { 0% { opacity: 0; transform: translateX(0) scale(1) } 15% { opacity: 1 } 80% { opacity: .9 } 100% { opacity: 0; transform: translateX(-105%) scale(.4) } }
 @keyframes ls-seg { 0%,100% { opacity: .16; transform: scaleY(.7) } 40%,60% { opacity: 1; transform: scaleY(1) } }
+@keyframes ls-rise { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
 @keyframes ls-blink { 50% { opacity: 0 } }
-@keyframes ls-rise { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
-@keyframes ls-scan { from { transform: translateY(-100%) } to { transform: translateY(100vh) } }
-@keyframes ls-shadow { 0%,100% { transform: scaleX(1); opacity: .5 } 50% { transform: scaleX(.78); opacity: .28 } }
+@keyframes ls-float { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-9px) } }
+@media (max-width: 720px) {
+  .ls-cab { width: clamp(160px, 50vw, 220px); }
+  .ls-chip-l { left: -42%; }
+  .ls-chip-r { right: -42%; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .ls-root * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+  .ls-root *, .ls-root *::before { animation-duration: 0.01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; }
+  .ls-chip, .ls-beam { display: none; }
 }
 `;
 
 /**
- * Full-screen loading screen: the DogeGameLab mascot, wordmark and a pixel
- * progress bar. Fully inline-styled, because it is shown before the stylesheet
- * arrives, and again while the DogeOS SDK loads its wallet list.
+ * Full-screen loading screen. Fully inline-styled, because it is shown before
+ * the stylesheet arrives, and again while the DogeOS SDK loads its wallet list.
  */
 export function LoadingShell() {
   const light =
     typeof document !== "undefined" && document.documentElement.dataset.theme === "light";
-  const [line, setLine] = useState(0);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
-    const timer = window.setInterval(() => setLine((n) => (n + 1) % STATUS_LINES.length), 1400);
+    const timer = window.setInterval(() => setTick((n) => n + 1), 1300);
     return () => window.clearInterval(timer);
   }, []);
 
   const c = light
     ? {
         bg: "#f1ede2",
-        grid: "rgba(14,128,69,.10)",
-        glow: "rgba(224,168,0,.30)",
+        ink: "#15211b",
+        line: "#15211b",
+        panel: "#fbf9f3",
+        rule: "#c9c2ad",
+        dot: "rgba(21,33,27,.09)",
+        glow: "rgba(224,168,0,.34)",
         doge: "#b88600",
-        game: "#15211b",
         lab: "#0e8045",
         dim: "#5d6b63",
-        line: "#c9c2ad",
-        bar: "#0e8045",
         pink: "#b8166f",
       }
     : {
         bg: "#080c0f",
-        grid: "rgba(61,255,143,.07)",
-        glow: "rgba(252,212,54,.28)",
+        ink: "#f4fff8",
+        line: "#d9f7e6",
+        panel: "#0c1215",
+        rule: "#1d2b25",
+        dot: "rgba(61,255,143,.075)",
+        glow: "rgba(252,212,54,.30)",
         doge: "#fcd436",
-        game: "#f4fff8",
         lab: "#3dff8f",
         dim: "#8fb5a1",
-        line: "#1d2b25",
-        bar: "#3dff8f",
         pink: "#ff3eb0",
       };
 
   const pixelFont = '"Press Start 2P", ui-monospace, Menlo, monospace';
+  const step = BUILD_STEPS[tick % BUILD_STEPS.length];
 
   return (
     <div
@@ -88,188 +117,234 @@ export function LoadingShell() {
         position: "fixed",
         inset: 0,
         overflow: "hidden",
-        display: "grid",
-        placeItems: "center",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "clamp(16px, 4vw, 40px)",
         background: c.bg,
-        backgroundImage: `radial-gradient(60% 45% at 50% 42%, ${c.glow}, transparent 70%), radial-gradient(circle at 1px 1px, ${c.grid} 1px, transparent 1.6px)`,
-        backgroundSize: "100% 100%, 20px 20px",
+        backgroundImage: `radial-gradient(circle at 1px 1px, ${c.dot} 1px, transparent 1.6px)`,
+        backgroundSize: "20px 20px",
         fontFamily: "ui-monospace, Menlo, monospace",
-        color: c.dim,
+        color: c.ink,
       }}
     >
       <style>{CSS}</style>
 
-      {/* slow scan line, like an old monitor warming up */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          top: 0,
-          height: 120,
-          background: `linear-gradient(to bottom, transparent, ${c.grid}, transparent)`,
-          animation: "ls-scan 4.5s linear infinite",
-          pointerEvents: "none",
-        }}
-      />
+      {/* the machine being built */}
+      <div className="ls-machine">
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            inset: "-18% -30%",
+            background: `radial-gradient(closest-side, ${c.glow}, transparent 72%)`,
+          }}
+        />
+        {CHIPS.map(([text, side, top, delay]) => (
+          <span
+            key={text}
+            aria-hidden="true"
+            className={`ls-chip ls-chip-${side}`}
+            style={{
+              top: `${top}%`,
+              animationDelay: `${delay}s`,
+              fontFamily: pixelFont,
+              fontSize: "clamp(9px, 1.5vw, 13px)",
+              color: side === "l" ? c.doge : c.lab,
+              textShadow: `0 0 10px ${c.glow}`,
+            }}
+          >
+            {text}
+          </span>
+        ))}
+        <svg
+          className="ls-cab"
+          viewBox="0 0 240 320"
+          role="img"
+          aria-label="An arcade cabinet being built, with the DogeGameLab Doge on its screen"
+        >
+          <defs>
+            <clipPath id="ls-screen-clip">
+              <rect x="58" y="62" width="124" height="104" rx="10" />
+            </clipPath>
+          </defs>
 
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: 26,
-          padding: 24,
-          animation: "ls-rise .5s ease-out both",
-        }}
-      >
-        {/* mascot with halo, spinning dashed ring and floating bits */}
-        <div style={{ position: "relative", width: 132, height: 132 }}>
-          <div
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              inset: -34,
-              borderRadius: "50%",
-              background: `radial-gradient(circle, ${c.glow}, transparent 68%)`,
-              animation: "ls-halo 2.4s ease-in-out infinite",
-            }}
-          />
-          <div
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              inset: -18,
-              borderRadius: "50%",
-              border: `3px dashed ${c.doge}`,
-              opacity: 0.55,
-              animation: "ls-ring 9s linear infinite",
-            }}
-          />
-          {FLOATERS.map(([left, top, size, delay, kind], index) => (
-            <span
-              key={index}
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                left: `${left}%`,
-                top: `${top}%`,
-                width: size,
-                height: size,
-                animation: `ls-float ${2.6 + (index % 3) * 0.5}s ease-in-out ${delay}s infinite`,
-                ...(kind === "coin"
-                  ? {
-                      borderRadius: "50%",
-                      background: "radial-gradient(circle at 35% 30%, #ffe680, #f6b21b 60%, #c98a00)",
-                      border: "2px solid #8a5a00",
-                      boxShadow: `0 0 12px ${c.glow}`,
-                    }
-                  : kind === "spark"
-                    ? {
-                        background: c.lab,
-                        clipPath:
-                          "polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%)",
-                      }
-                    : { background: c.pink }),
-              }}
+          {/* blueprint guide lines */}
+          <g className="ls-guide" stroke={c.lab} strokeWidth="1.2" fill="none">
+            <path d="M4 20 H236 M4 304 H236 M34 4 V316 M206 4 V316 M120 4 V316" />
+          </g>
+
+          <g stroke={c.line} strokeWidth="3.2">
+            {/* cabinet body */}
+            <path
+              className="ls-line"
+              pathLength={1}
+              style={{ fill: c.panel }}
+              d="M44 20 H196 L206 46 V182 L222 214 V236 H206 V304 H34 V236 H18 V214 L34 182 V46 Z"
+            />
+            {/* marquee */}
+            <path className="ls-line" pathLength={1} d="M52 30 H188 L192 46 H48 Z" />
+            {/* screen bezel */}
+            <rect
+              className="ls-line"
+              pathLength={1}
+              x="50"
+              y="54"
+              width="140"
+              height="120"
+              rx="14"
+              style={{ animationDelay: ".15s" }}
+            />
+            {/* control deck */}
+            <path
+              className="ls-line"
+              pathLength={1}
+              d="M34 182 H206 M18 214 H222"
+              style={{ animationDelay: ".3s" }}
+            />
+            {/* coin door and base */}
+            <rect
+              className="ls-line"
+              pathLength={1}
+              x="96"
+              y="250"
+              width="48"
+              height="34"
+              rx="4"
+              style={{ animationDelay: ".45s" }}
+            />
+            <path
+              className="ls-line"
+              pathLength={1}
+              d="M114 262 V272 M126 262 V272 M34 296 H206"
+              style={{ animationDelay: ".55s" }}
+            />
+          </g>
+
+          {/* marquee lights */}
+          {[70, 95, 120, 145, 170].map((x, index) => (
+            <rect
+              key={x}
+              x={x - 6}
+              y="35"
+              width="12"
+              height="6"
+              fill={index % 2 ? c.lab : c.doge}
+              style={{ animation: `ls-blink 1s steps(1) ${1 + index * 0.12}s infinite` }}
             />
           ))}
-          <img
-            src={mascot}
-            alt=""
-            width={132}
-            height={132}
-            draggable={false}
-            style={{
-              position: "relative",
-              width: 132,
-              height: 132,
-              borderRadius: 30,
-              border: `4px solid ${c.doge}`,
-              boxShadow: `0 0 0 4px ${c.bg}, 0 0 34px ${c.glow}`,
-              animation: "ls-bob 1.8s ease-in-out infinite",
-              display: "block",
-            }}
-          />
-          <div
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              left: "18%",
-              right: "18%",
-              bottom: -22,
-              height: 10,
-              borderRadius: "50%",
-              background: light ? "rgba(21,33,27,.25)" : "rgba(0,0,0,.6)",
-              filter: "blur(4px)",
-              animation: "ls-shadow 1.8s ease-in-out infinite",
-            }}
-          />
-        </div>
 
-        {/* wordmark */}
+          {/* the screen switches on */}
+          <g className="ls-screen">
+            <rect x="58" y="62" width="124" height="104" rx="10" fill="#14192b" />
+            <image
+              href={mascot}
+              x="58"
+              y="52"
+              width="124"
+              height="124"
+              clipPath="url(#ls-screen-clip)"
+              preserveAspectRatio="xMidYMid slice"
+            />
+            <rect
+              className="ls-screen-glow"
+              x="58"
+              y="62"
+              width="124"
+              height="104"
+              rx="10"
+              fill="none"
+              stroke={c.doge}
+              strokeWidth="2.5"
+            />
+          </g>
+
+          {/* build beam sweeping down the cabinet */}
+          <g className="ls-beam">
+            <rect x="10" y="22" width="220" height="2.5" fill={c.lab} />
+            <rect x="10" y="24" width="220" height="14" fill={c.lab} opacity="0.12" />
+          </g>
+
+          {/* joystick and buttons */}
+          <g className="ls-stick">
+            <path d="M78 222 V196" stroke={c.line} strokeWidth="4" strokeLinecap="round" />
+            <circle cx="78" cy="192" r="8" fill={c.pink} stroke={c.line} strokeWidth="3" />
+          </g>
+          <ellipse cx="78" cy="224" rx="13" ry="5" fill={c.panel} stroke={c.line} strokeWidth="3" />
+          <g className="ls-btn">
+            <circle cx="138" cy="200" r="8" fill={c.doge} stroke={c.line} strokeWidth="3" />
+          </g>
+          <g className="ls-btn" style={{ animationDelay: "1.9s" }}>
+            <circle cx="166" cy="198" r="8" fill={c.lab} stroke={c.line} strokeWidth="3" />
+          </g>
+        </svg>
+      </div>
+
+      {/* our logo, a pixel progress bar and the build log */}
+      <div className="ls-below">
         <div
           style={{
-            marginTop: 14,
+            display: "flex",
+            alignItems: "center",
+            gap: "clamp(8px, 1.6vw, 14px)",
             fontFamily: pixelFont,
-            fontSize: "clamp(16px, 4.6vw, 26px)",
-            letterSpacing: "0.02em",
+            fontSize: "clamp(15px, 3.6vw, 26px)",
             lineHeight: 1,
             whiteSpace: "nowrap",
             textShadow: `0 0 18px ${c.glow}`,
           }}
         >
-          <span style={{ color: c.doge }}>DOGE</span>
-          <span style={{ color: c.game }}>GAME</span>
-          <span style={{ color: c.lab }}>LAB</span>
+          <img
+            src={mark}
+            alt=""
+            style={{ width: "clamp(26px, 5vw, 40px)", height: "clamp(26px, 5vw, 40px)" }}
+          />
+          <span>
+            <span style={{ color: c.doge }}>DOGE</span>
+            <span>GAME</span>
+            <span style={{ color: c.lab }}>LAB</span>
+          </span>
         </div>
 
-        {/* pixel progress bar */}
         <div
           aria-hidden="true"
           style={{
             display: "flex",
             gap: 4,
             padding: 5,
-            border: `2px solid ${c.line}`,
-            background: light ? "rgba(255,255,255,.5)" : "rgba(0,0,0,.35)",
+            border: `2px solid ${c.rule}`,
+            background: c.panel,
           }}
         >
           {Array.from({ length: BAR_SEGMENTS }, (_, index) => (
             <span
               key={index}
               style={{
-                width: "clamp(8px, 2.6vw, 14px)",
-                height: 16,
-                background: index < 4 ? c.doge : c.bar,
-                animation: `ls-seg 1.6s ease-in-out ${index * 0.09}s infinite`,
+                width: "clamp(7px, 2.2vw, 13px)",
+                height: 14,
+                background: index < 5 ? c.doge : c.lab,
+                animation: `ls-seg 1.6s ease-in-out ${index * 0.08}s infinite`,
               }}
             />
           ))}
         </div>
 
-        {/* rotating status line */}
         <div
           style={{
             minHeight: 18,
             fontSize: 12,
             fontWeight: 700,
-            letterSpacing: "0.16em",
+            letterSpacing: "0.12em",
             color: c.dim,
             textAlign: "center",
           }}
         >
-          <span style={{ color: c.lab }}>&gt;</span>{" "}
-          <span key={line} style={{ display: "inline-block", animation: "ls-rise .3s ease-out both" }}>
-            {STATUS_LINES[line]}
+          <span style={{ color: c.lab }}>$</span> build <span style={{ color: c.pink }}>--</span>
+          <span key={step} style={{ display: "inline-block", animation: "ls-rise .3s ease-out both" }}>
+            {step}
           </span>
           <span style={{ color: c.lab, animation: "ls-blink 1s steps(1) infinite" }}>█</span>
-        </div>
-
-        <div style={{ fontSize: 10, letterSpacing: "0.22em", opacity: 0.7 }}>
-          PROMPT <span style={{ color: c.pink }}>//</span> PLAY{" "}
-          <span style={{ color: c.pink }}>//</span> SHARE
         </div>
       </div>
     </div>
