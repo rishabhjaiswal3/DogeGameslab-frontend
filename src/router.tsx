@@ -8,6 +8,8 @@ export const router = createRouter({
   routeTree,
   context: { queryClient },
   scrollRestoration: true,
+  // Route chunks are split per page; start fetching one when a link is hovered or touched.
+  defaultPreload: "intent",
   defaultPreloadStaleTime: 0,
   ...(APP_BASE ? { basepath: APP_BASE } : {}),
 });

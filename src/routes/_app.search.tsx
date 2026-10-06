@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GamePosterCard } from "@/components/studio/GamePosterCard";
 import { PageHeader } from "@/components/studio/PageHeader";
+import { VirtualGrid, type GridBreakpoints } from "@/components/studio/VirtualGrid";
 import { fetchGamesPage } from "@/lib/api/games";
 import type { Game } from "@/lib/games-data";
 import { prepareReelPlayEntry } from "@/lib/reelFeed";
@@ -17,6 +18,14 @@ export const Route = createFileRoute("/_app/search")({
   }),
   component: SearchGames,
 });
+
+// Mirrors the Tailwind grid this page used: 2 columns, md:3, xl:4, 2xl:5.
+const RESULT_COLUMNS: GridBreakpoints = [
+  [0, 2],
+  [768, 3],
+  [1280, 4],
+  [1536, 5],
+];
 
 function SearchGames() {
   const navigate = useNavigate();
@@ -121,17 +130,20 @@ function SearchGames() {
               text="Try a different game title, category, or creator."
             />
           ) : (
-            <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-              {results.map((game, index) => (
+            <VirtualGrid
+              className="mt-4"
+              items={results}
+              breakpoints={RESULT_COLUMNS}
+              getKey={(game, index) => `${game.templateId ?? game.title}-${index}`}
+              renderItem={(game, index, intro) => (
                 <GamePosterCard
-                  key={`${game.templateId ?? game.title}-${index}`}
                   game={game}
                   index={index}
                   onClick={() => playGame(game)}
-                  animated
+                  animated={intro}
                 />
-              ))}
-            </div>
+              )}
+            />
           )}
         </div>
       </div>

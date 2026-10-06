@@ -4,6 +4,7 @@ import useEmblaCarousel from "embla-carousel-react";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { fetchGamesPage } from "@/lib/api/games";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { VIEWS_TOP_LIMIT } from "@/lib/pagination";
 import type { Game } from "@/lib/games-data";
 import { fetchCreatorScoreLeaderboard, type CreatorScoreEntry } from "@/lib/api/leaderboards";
@@ -107,6 +108,7 @@ function uniqueGames(games: Game[]) {
 
 export function Home() {
   const navigate = useNavigate();
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
   const { studio, createdGames } = useStudioContext();
   const createChat = useCreateChatFlow({
     onReady: (prompt) => {
@@ -336,112 +338,124 @@ export function Home() {
 
       {tickerItems.length > 0 && <Ticker items={tickerItems} />}
 
+      {/* Only the layout for the current viewport is mounted, so the hidden one neither
+          renders nor fetches. `isDesktop` matches Tailwind's `lg` breakpoint. */}
       {/* Phones & tablets: one horizontal row per category, then creators. */}
-      <div className="mt-8 space-y-7 px-4 sm:px-6 lg:hidden">
-        {homeRowCategories.map((category) => (
-          <CategoryGameRow key={category} category={category} onOpen={openGame} />
-        ))}
-        {topCreators.length > 0 && (
-          <TopCreators creators={topCreators} onViewAll={() => navigate({ to: "/leaderboard" })} />
-        )}
-      </div>
-
-      {/* Desktop: every shelf in the main column; stats/events stay pinned beside it. */}
-      <div className="mt-8 hidden gap-6 px-8 lg:grid xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="min-w-0 space-y-8">
-          {gamesLoading ? (
-            <ShelfSkeleton />
-          ) : shelves.length === 0 ? (
-            <EmptyState
-              title="NO CARTRIDGES"
-              text="No games found. Check back soon or create the first one!"
-            />
-          ) : (
-            shelves.map((shelf) => (
-              <GameShelf
-                key={shelf.title}
-                {...shelf}
-                onOpen={openGame}
-                onLoadMore={loadMoreGames}
-                hasMore={hasMoreGames}
-                loadingMore={loadingMoreGames}
-              />
-            ))
-          )}
-          {(hasMoreGames || loadingMoreGames) && communityGames.length > 0 && (
-            <div ref={gamesLoadMoreRef} className="py-6 text-center font-mono text-xs text-text-3">
-              {loadingMoreGames && (
-                <>
-                  <Spinner /> loading more cartridges…
-                </>
-              )}
-            </div>
-          )}
-        </div>
-
-        <aside className="no-scrollbar hidden space-y-5 self-start xl:sticky xl:top-[68px] xl:block xl:max-h-[calc(100dvh-84px)] xl:overflow-y-auto">
-          <Panel title="creator_stats" tone="phos">
-            <div className="grid grid-cols-2 gap-2">
-              <Stat
-                label="Games"
-                value={formatCount(creatorStats?.games ?? createdGames.length)}
-                tone="phos"
-              />
-              <Stat label="Plays" value={formatCount(creatorStats?.plays)} tone="cyan" />
-              <Stat
-                label="Creator score"
-                value={formatCount(creatorStats?.creatorScore)}
-                tone="amber"
-              />
-              <Stat
-                label="Doge Points"
-                value={formatCount(creatorStats?.lifetimePoints)}
-                tone="magenta"
-              />
-            </div>
-            <div className="mt-2 flex items-center justify-between border-2 border-line bg-ink-1 px-3 py-2.5">
-              <span className="label-term text-text-3">Followers</span>
-              <span className="font-term text-[28px] leading-none text-text">
-                {formatCount(creatorStats?.followers)}
-              </span>
-            </div>
-          </Panel>
-
-          <Panel
-            title="event_log"
-            tone="cyan"
-            actions={
-              <button
-                type="button"
-                onClick={() => setRecentEventsOpen(true)}
-                className="font-mono text-[10px] font-extrabold uppercase tracking-[0.12em] text-cyan hover:underline"
-              >
-                tail -f ›
-              </button>
-            }
-            bodyClassName="p-0"
-          >
-            {displayedActivities.length === 0 ? (
-              <p className="p-4 text-xs text-text-3">
-                No platform events yet — created and published games will show up here.
-              </p>
-            ) : (
-              <ul className="divide-y-2 divide-line">
-                {displayedActivities.slice(0, 6).map((item) => (
-                  <ActivityEventRow key={item._id} item={item} />
-                ))}
-              </ul>
-            )}
-          </Panel>
-
+      {!isDesktop && (
+        <div className="mt-8 space-y-7 px-4 sm:px-6 lg:hidden">
+          {homeRowCategories.map((category) => (
+            <CategoryGameRow key={category} category={category} onOpen={openGame} />
+          ))}
           {topCreators.length > 0 && (
             <TopCreators
               creators={topCreators}
               onViewAll={() => navigate({ to: "/leaderboard" })}
             />
           )}
-        </aside>
-      </div>
+        </div>
+      )}
+
+      {/* Desktop: every shelf in the main column; stats/events stay pinned beside it. */}
+      {isDesktop && (
+        <div className="mt-8 hidden gap-6 px-8 lg:grid xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="min-w-0 space-y-8">
+            {gamesLoading ? (
+              <ShelfSkeleton />
+            ) : shelves.length === 0 ? (
+              <EmptyState
+                title="NO CARTRIDGES"
+                text="No games found. Check back soon or create the first one!"
+              />
+            ) : (
+              shelves.map((shelf) => (
+                <GameShelf
+                  key={shelf.title}
+                  {...shelf}
+                  onOpen={openGame}
+                  onLoadMore={loadMoreGames}
+                  hasMore={hasMoreGames}
+                  loadingMore={loadingMoreGames}
+                />
+              ))
+            )}
+            {(hasMoreGames || loadingMoreGames) && communityGames.length > 0 && (
+              <div
+                ref={gamesLoadMoreRef}
+                className="py-6 text-center font-mono text-xs text-text-3"
+              >
+                {loadingMoreGames && (
+                  <>
+                    <Spinner /> loading more cartridges…
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          <aside className="no-scrollbar hidden space-y-5 self-start xl:sticky xl:top-[68px] xl:block xl:max-h-[calc(100dvh-84px)] xl:overflow-y-auto">
+            <Panel title="creator_stats" tone="phos">
+              <div className="grid grid-cols-2 gap-2">
+                <Stat
+                  label="Games"
+                  value={formatCount(creatorStats?.games ?? createdGames.length)}
+                  tone="phos"
+                />
+                <Stat label="Plays" value={formatCount(creatorStats?.plays)} tone="cyan" />
+                <Stat
+                  label="Creator score"
+                  value={formatCount(creatorStats?.creatorScore)}
+                  tone="amber"
+                />
+                <Stat
+                  label="Doge Points"
+                  value={formatCount(creatorStats?.lifetimePoints)}
+                  tone="magenta"
+                />
+              </div>
+              <div className="mt-2 flex items-center justify-between border-2 border-line bg-ink-1 px-3 py-2.5">
+                <span className="label-term text-text-3">Followers</span>
+                <span className="font-term text-[28px] leading-none text-text">
+                  {formatCount(creatorStats?.followers)}
+                </span>
+              </div>
+            </Panel>
+
+            <Panel
+              title="event_log"
+              tone="cyan"
+              actions={
+                <button
+                  type="button"
+                  onClick={() => setRecentEventsOpen(true)}
+                  className="font-mono text-[10px] font-extrabold uppercase tracking-[0.12em] text-cyan hover:underline"
+                >
+                  tail -f ›
+                </button>
+              }
+              bodyClassName="p-0"
+            >
+              {displayedActivities.length === 0 ? (
+                <p className="p-4 text-xs text-text-3">
+                  No platform events yet — created and published games will show up here.
+                </p>
+              ) : (
+                <ul className="divide-y-2 divide-line">
+                  {displayedActivities.slice(0, 6).map((item) => (
+                    <ActivityEventRow key={item._id} item={item} />
+                  ))}
+                </ul>
+              )}
+            </Panel>
+
+            {topCreators.length > 0 && (
+              <TopCreators
+                creators={topCreators}
+                onViewAll={() => navigate({ to: "/leaderboard" })}
+              />
+            )}
+          </aside>
+        </div>
+      )}
 
       <Dialog open={recentEventsOpen} onOpenChange={setRecentEventsOpen}>
         <DialogContent className="max-h-[82vh] overflow-hidden p-0 sm:max-w-xl">

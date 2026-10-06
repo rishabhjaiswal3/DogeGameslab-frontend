@@ -623,7 +623,7 @@ function Create() {
                     onClick={() => startTierBuild(t.tier)}
                     disabled={!hasBuildPrompt}
                     className="tier-card group flex min-h-[150px] flex-col border-2 border-line p-3.5 text-left disabled:cursor-not-allowed disabled:opacity-50"
-                    style={{ ["--tier" as string]: TONE_VAR[t.tone] }}
+                    style={{ "--tier": TONE_VAR[t.tone] } as React.CSSProperties}
                   >
                     <span className="flex items-center justify-between">
                       <span className={cn("flex items-center gap-2.5", TONE_TEXT[t.tone])}>
@@ -670,7 +670,7 @@ function Create() {
                 <div
                   key={t.tier}
                   className="tier-card border-2 border-line p-3.5"
-                  style={{ ["--tier" as string]: TONE_VAR[t.tone] }}
+                  style={{ "--tier": TONE_VAR[t.tone] } as React.CSSProperties}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className={cn("flex items-center gap-2.5", TONE_TEXT[t.tone])}>

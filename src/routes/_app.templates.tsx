@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/studio/PageHeader";
+import { VirtualGrid, type GridBreakpoints } from "@/components/studio/VirtualGrid";
 import { templateEmoji, engineOf, getThumbnailUrl } from "@/lib/studio-meta";
 import { useStudioContext } from "@/context/StudioContext";
 import { useGameTemplates } from "@/hooks/useGameTemplates";
@@ -35,13 +36,24 @@ const engines: {
   { id: "construct", label: "Quick Games", description: "Jump in and play", icon: "bolt" },
 ];
 
+/** The template fields this page renders. */
+type TemplateCard = { id: string; name: string; category: string; mechanic: string };
+
+// Mirrors the Tailwind grid this page used: 2 columns, md:3, xl:4.
+const TEMPLATE_COLUMNS: GridBreakpoints = [
+  [0, 2],
+  [768, 3],
+  [1280, 4],
+];
+
 function Templates() {
   const { studio, openInStudio } = useStudioContext();
   const navigate = useNavigate();
   const { gameTemplates, loading } = useGameTemplates();
   const [failedImageIds, setFailedImageIds] = useState<Set<string>>(() => new Set());
   const list = useMemo(
-    () => gameTemplates.filter((t: any) => engineOf(t) === studio.engine),
+    () =>
+      gameTemplates.filter((t: any) => engineOf(t) === studio.engine) as unknown as TemplateCard[],
     [gameTemplates, studio.engine],
   );
 
@@ -104,12 +116,18 @@ function Templates() {
         {list.length === 0 ? (
           <EmptyState className="mt-6" text="No templates for this style yet." />
         ) : (
-          <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-            {list.map((t: any, i: number) => (
+          <VirtualGrid
+            className="mt-6"
+            items={list}
+            breakpoints={TEMPLATE_COLUMNS}
+            getKey={(t) => t.id}
+            renderItem={(t, i, intro) => (
               <article
-                key={t.id}
-                className="animate-rise group flex flex-col border-2 border-line bg-ink-2 transition-colors hover:border-phos"
-                style={{ animationDelay: `${Math.min(i, 12) * 40}ms` }}
+                className={cn(
+                  "group flex flex-col border-2 border-line bg-ink-2 transition-colors hover:border-phos",
+                  intro && "animate-rise",
+                )}
+                style={intro ? { animationDelay: `${Math.min(i, 12) * 40}ms` } : undefined}
               >
                 <div className="scanlines relative aspect-[4/3] overflow-hidden border-b-2 border-line bg-ink-0 group-hover:border-phos">
                   {!failedImageIds.has(String(t.id)) ? (
@@ -164,8 +182,8 @@ function Templates() {
                   </Btn>
                 </div>
               </article>
-            ))}
-          </div>
+            )}
+          />
         )}
       </div>
     </div>

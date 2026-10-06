@@ -29,11 +29,7 @@ function generationLimitMessage(error: any) {
   );
 }
 
-function logGenerationRequest(
-  phase: string,
-  detail: Record<string, unknown>,
-  error?: unknown,
-) {
+function logGenerationRequest(phase: string, detail: Record<string, unknown>, error?: unknown) {
   const payload = {
     phase,
     at: new Date().toISOString(),
@@ -42,10 +38,15 @@ function logGenerationRequest(
       ? {
           error:
             error instanceof Error
-              ? { name: error.name, message: error.message, code: (error as { code?: string }).code }
+              ? {
+                  name: error.name,
+                  message: error.message,
+                  code: (error as { code?: string }).code,
+                }
               : String(error),
           status: (error as { response?: { status?: number } })?.response?.status ?? null,
-          serverError: (error as { response?: { data?: { error?: string } } })?.response?.data?.error ?? null,
+          serverError:
+            (error as { response?: { data?: { error?: string } } })?.response?.data?.error ?? null,
         }
       : {}),
   };
@@ -267,20 +268,17 @@ export function localPackage(template: any, options: any, themePresets: any) {
     throw new Error("Template is unavailable");
   }
   const presets =
-    themePresets && typeof themePresets === "object" ? themePresets : ({} as Record<string, unknown>);
-  const theme =
-    presets[options?.theme as keyof typeof presets] ??
-    presets.neon ??
-    DEFAULT_THEME;
+    themePresets && typeof themePresets === "object"
+      ? themePresets
+      : ({} as Record<string, unknown>);
+  const theme = presets[options?.theme as keyof typeof presets] ?? presets.neon ?? DEFAULT_THEME;
   const difficultyTable =
     template?.difficulty && typeof template.difficulty === "object"
       ? template.difficulty
       : DEFAULT_DIFFICULTY;
   const difficultyKey = options?.difficulty ?? "normal";
   const tuning =
-    difficultyTable[difficultyKey] ??
-    difficultyTable.normal ??
-    DEFAULT_DIFFICULTY.normal;
+    difficultyTable[difficultyKey] ?? difficultyTable.normal ?? DEFAULT_DIFFICULTY.normal;
   const slug = `${template.id}-${options?.theme ?? "neon"}-${Date.now().toString(36)}`;
 
   return {
@@ -362,15 +360,17 @@ function localTemplateExport(gameTemplates: any[], themePresets: any) {
   };
 }
 
+// Module-level fallbacks keep the same reference on every render until the templates load.
+const EMPTY_TEMPLATES: Awaited<ReturnType<typeof loadTemplateModule>>["gameTemplates"] = [];
+const FALLBACK_THEME_PRESETS = { neon: { label: "Neon", mood: "", colors: [] } };
+
 export function useCreatorStudio() {
   const generationRef = useRef(0);
   const [templatesModule, setTemplatesModule] = useState<Awaited<
     ReturnType<typeof loadTemplateModule>
   > | null>(null);
-  const gameTemplates = templatesModule?.gameTemplates ?? [];
-  const themePresets = templatesModule?.themePresets ?? {
-    neon: { label: "Neon", mood: "", colors: [] },
-  };
+  const gameTemplates = templatesModule?.gameTemplates ?? EMPTY_TEMPLATES;
+  const themePresets = templatesModule?.themePresets ?? FALLBACK_THEME_PRESETS;
   const templatesReady = templatesModule !== null;
 
   useEffect(() => {
@@ -713,7 +713,8 @@ export function useCreatorStudio() {
           const result = response.data;
           baseGame = {
             ...result.game,
-            thumbnailUrl: result.game?.thumbnailUrl ?? withAppBase("/thumbnails/simple-agent-game-cover.png"),
+            thumbnailUrl:
+              result.game?.thumbnailUrl ?? withAppBase("/thumbnails/simple-agent-game-cover.png"),
           };
           // Only move the studio selection when the backend picked a real
           // template. Pure-agent games have templateId "pure-agent", which is
@@ -822,9 +823,7 @@ export function useCreatorStudio() {
               ...(prev ?? baseGame),
               tier: "ai-refinement",
               refinement,
-              ...(refinement.gameplayAssets
-                ? { gameplayAssets: refinement.gameplayAssets }
-                : {}),
+              ...(refinement.gameplayAssets ? { gameplayAssets: refinement.gameplayAssets } : {}),
             }));
             setPackageMode("Prompt + Agents");
             setStatus("Game generated with code");
@@ -992,40 +991,79 @@ export function useCreatorStudio() {
     }
   }, [gameTemplates, themePresets]);
 
-  return {
-    templates: filteredTemplates,
-    engine,
-    setEngine,
-    themePresets,
-    selectedTemplate,
-    selectedId,
-    setSelectedId,
-    isTemplateSyncPaused,
-    prompt,
-    setPrompt,
-    theme,
-    setTheme,
-    difficulty,
-    setDifficulty,
-    customization,
-    setCustomization,
-    extra,
-    setExtra,
-    status,
-    agentStack,
-    agentStatus,
-    orchestrationPlan,
-    assetResult,
-    packageMode,
-    generatedPackage,
-    activeBuild,
-    cancelActiveBuild,
-    createFromTemplate,
-    generateFromPrompt,
-    refineWithAi,
-    orchestrateBuild,
-    generateAssets,
-    getTemplateExport,
-    templatesReady,
-  };
+  // The studio is shared through context: keep one object while none of its fields changed.
+  return useMemo(
+    () => ({
+      templates: filteredTemplates,
+      engine,
+      setEngine,
+      themePresets,
+      selectedTemplate,
+      selectedId,
+      setSelectedId,
+      isTemplateSyncPaused,
+      prompt,
+      setPrompt,
+      theme,
+      setTheme,
+      difficulty,
+      setDifficulty,
+      customization,
+      setCustomization,
+      extra,
+      setExtra,
+      status,
+      agentStack,
+      agentStatus,
+      orchestrationPlan,
+      assetResult,
+      packageMode,
+      generatedPackage,
+      activeBuild,
+      cancelActiveBuild,
+      createFromTemplate,
+      generateFromPrompt,
+      refineWithAi,
+      orchestrateBuild,
+      generateAssets,
+      getTemplateExport,
+      templatesReady,
+    }),
+    [
+      filteredTemplates,
+      engine,
+      setEngine,
+      themePresets,
+      selectedTemplate,
+      selectedId,
+      setSelectedId,
+      isTemplateSyncPaused,
+      prompt,
+      setPrompt,
+      theme,
+      setTheme,
+      difficulty,
+      setDifficulty,
+      customization,
+      setCustomization,
+      extra,
+      setExtra,
+      status,
+      agentStack,
+      agentStatus,
+      orchestrationPlan,
+      assetResult,
+      packageMode,
+      generatedPackage,
+      activeBuild,
+      cancelActiveBuild,
+      createFromTemplate,
+      generateFromPrompt,
+      refineWithAi,
+      orchestrateBuild,
+      generateAssets,
+      getTemplateExport,
+      templatesReady,
+    ],
+  );
 }

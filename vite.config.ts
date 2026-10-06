@@ -14,7 +14,13 @@ export default defineConfig(({ command }) => ({
       autoCodeSplitting: true,
       routeFileIgnorePattern: ".*\\.full\\.tsx$",
     }),
-    react(),
+    // React Compiler memoizes components and hooks at build time. A file can opt out with a
+    // "use no memo" directive at the top of the component or hook.
+    react({
+      babel: {
+        plugins: ["babel-plugin-react-compiler"],
+      },
+    }),
     // Tailwind blocks the dev server for minutes on first compile — build CSS via
     // `npm run dev:css` instead and serve it from /public in development.
     ...(command === "build" ? [tailwindcss()] : []),

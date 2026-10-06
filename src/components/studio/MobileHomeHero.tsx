@@ -12,10 +12,34 @@ import { cn } from "@/lib/utils";
 
 // How a game gets made: four stations on one conveyor, each with its own colour.
 const PIPELINE = [
-  { step: "01", label: "Describe", note: "one line is enough", Icon: LineTerminal, color: "var(--phos)" },
-  { step: "02", label: "AI builds", note: "agents write the code", Icon: LineRobot, color: "var(--cyan)" },
-  { step: "03", label: "Playtest", note: "auto-tested & repaired", Icon: LineGamepad, color: "var(--magenta)" },
-  { step: "04", label: "Publish", note: "share a playable link", Icon: LineRocket, color: "var(--amber)" },
+  {
+    step: "01",
+    label: "Describe",
+    note: "one line is enough",
+    Icon: LineTerminal,
+    color: "var(--phos)",
+  },
+  {
+    step: "02",
+    label: "AI builds",
+    note: "agents write the code",
+    Icon: LineRobot,
+    color: "var(--cyan)",
+  },
+  {
+    step: "03",
+    label: "Playtest",
+    note: "auto-tested & repaired",
+    Icon: LineGamepad,
+    color: "var(--magenta)",
+  },
+  {
+    step: "04",
+    label: "Publish",
+    note: "share a playable link",
+    Icon: LineRocket,
+    color: "var(--amber)",
+  },
 ];
 
 const STAGES: { id: ChatStage; label: string }[] = [
@@ -69,8 +93,8 @@ export function HomeHero({
             <span className="block text-magenta glow-magenta">&gt; PLAYABLE</span>
           </h1>
           <p className="mt-5 max-w-md text-[14px] leading-relaxed text-text-2">
-            Describe a game in plain words. DogeGame&apos;s AI agents write the code, playtest it, and
-            hand you a world you can play, publish and share — on DogeOS.
+            Describe a game in plain words. DogeGame&apos;s AI agents write the code, playtest it,
+            and hand you a world you can play, publish and share — on DogeOS.
           </p>
           <DogeOSBadge className="mt-4" />
 
@@ -145,19 +169,18 @@ export function HomeHero({
       </div>
 
       {/* Pipeline: four stations joined by a moving conveyor belt */}
-      <ol
-        className="mt-8 grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-0"
-        aria-label="How it works"
-      >
+      <ol className="mt-8 grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-0" aria-label="How it works">
         {PIPELINE.map(({ step, label, note, Icon, color }, index) => (
           <li key={step} className="flex min-w-0 items-stretch">
             <div
               className="conveyor-step flex min-w-0 flex-1 items-center gap-2.5 border-2 border-line px-2.5 py-3 sm:gap-3 sm:px-3"
-              style={{
-                ["--step" as string]: color,
-                ["--line-accent" as string]: color,
-                ["--delay" as string]: `${index * 1.1}s`,
-              }}
+              style={
+                {
+                  "--step": color,
+                  "--line-accent": color,
+                  "--delay": `${index * 1.1}s`,
+                } as React.CSSProperties
+              }
             >
               <span
                 aria-hidden="true"
@@ -185,7 +208,9 @@ export function HomeHero({
                     {label}
                   </span>
                 </span>
-                <span className="mt-1 block text-[10px] leading-tight text-text-3 sm:truncate sm:text-[11px]">{note}</span>
+                <span className="mt-1 block text-[10px] leading-tight text-text-3 sm:truncate sm:text-[11px]">
+                  {note}
+                </span>
               </span>
             </div>
             {index < PIPELINE.length - 1 && (

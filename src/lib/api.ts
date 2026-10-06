@@ -13,32 +13,6 @@ export const api = axios.create({
   withCredentials: true,
 });
 
-type AnalyticsAxiosConfig = typeof api.defaults & { __analyticsStartedAt?: number };
-
-function analyticsEndpoint(url?: string) {
-  if (!url) return "unknown";
-  try {
-    const path = new URL(url, baseURL).pathname;
-    return path
-      .replace(/\/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, "/:id")
-      .replace(/\/[A-Za-z0-9_-]{18,}(?=\/|$)/g, "/:id")
-      .replace(/\/\d+(?=\/|$)/g, "/:id");
-  } catch {
-    return "unknown";
-  }
-}
-
-function reportApiAnalytics(detail: Record<string, unknown>) {
-  window.dispatchEvent(
-    new CustomEvent("dogegame:api-analytics", { detail: { service: "creator-studio", ...detail } }),
-  );
-}
-
-api.interceptors.request.use((config) => {
-  (config as unknown as AnalyticsAxiosConfig).__analyticsStartedAt = performance.now();
-  return config;
-});
-
 // --- JWT plumbing -----------------------------------------------------------
 // Write endpoints require a Bearer token. The token is issued after the
 // connected DogeOS wallet signs a server challenge, so fetching one prompts the
@@ -224,17 +198,7 @@ api.interceptors.request.use(async (config) => {
 });
 
 api.interceptors.response.use(
-  (response) => {
-    const startedAt = (response.config as unknown as AnalyticsAxiosConfig).__analyticsStartedAt;
-    reportApiAnalytics({
-      outcome: "success",
-      method: response.config.method?.toUpperCase(),
-      endpoint: analyticsEndpoint(response.config.url),
-      status: response.status,
-      duration_ms: startedAt ? Math.round(performance.now() - startedAt) : undefined,
-    });
-    return response;
-  },
+  (response) => response,
   async (error) => {
     const config = error.config;
     if (error.response?.status === 401 && config && !config.__retriedAuth) {
@@ -249,17 +213,6 @@ api.interceptors.response.use(
         return api.request(config);
       }
     }
-    const startedAt = (error.config as AnalyticsAxiosConfig | undefined)?.__analyticsStartedAt;
-    reportApiAnalytics({
-      outcome: "failure",
-      method: error.config?.method?.toUpperCase(),
-      endpoint: analyticsEndpoint(error.config?.url),
-      status: error.response?.status,
-      duration_ms: startedAt ? Math.round(performance.now() - startedAt) : undefined,
-      error_code: typeof error.code === "string" ? error.code : undefined,
-      is_timeout: error.code === "ECONNABORTED",
-      retried_auth: Boolean(error.config?.__retriedAuth),
-    });
     return Promise.reject(error);
   },
 );

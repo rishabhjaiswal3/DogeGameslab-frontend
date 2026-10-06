@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { useStudioContext } from "@/context/StudioContext";
+import { useSidebarState } from "@/context/StudioContext";
 import { AccountControls } from "@/components/studio/AccountControls";
 import { DogeGameLogo } from "@/components/studio/DogeGameLogo";
 import { NAV_ITEMS } from "@/components/studio/navItems";
@@ -17,8 +17,7 @@ function isTypingTarget(target: EventTarget | null) {
 
 /** Desktop command rail. Number keys 1–6 jump between sections. */
 export function Sidebar() {
-  const { sidebarCollapsed, setSidebarCollapsed } = useStudioContext();
-  const collapsed = sidebarCollapsed;
+  const { sidebarCollapsed: collapsed, setSidebarCollapsed } = useSidebarState();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const inGame = /\/(play|edit)(\/|$)/.test(pathname);

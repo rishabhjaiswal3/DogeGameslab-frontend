@@ -22,7 +22,10 @@ export function WalletAccountPopover({ children, onSignOut }: WalletAccountPopov
     <Popover>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent align="end" sideOffset={10} className="w-[min(92vw,22rem)] p-0">
-        <div className="px-titlebar" style={{ ["--panel-line" as string]: "var(--phos-3)" }}>
+        <div
+          className="px-titlebar"
+          style={{ "--panel-line": "var(--phos-3)" } as React.CSSProperties}
+        >
           <span className="flex-1">dogeos_wallet.sys</span>
           <span className="text-doge">● online</span>
         </div>

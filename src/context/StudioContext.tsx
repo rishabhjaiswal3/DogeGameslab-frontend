@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { useStudioAuth } from "@/hooks/useStudioAuth";
 import { useCreatorStudio } from "@/hooks/useCreatorStudio";
 import { api } from "@/lib/api";
@@ -17,11 +25,20 @@ type StudioContextValue = {
   refreshCreatedGames: () => Promise<void>;
   /** Select a template (switching engine if needed) and jump to the Create route. */
   openInStudio: (templateId: string) => void;
-  sidebarCollapsed: boolean;
   setSidebarCollapsed: (collapsed: boolean) => void;
 };
 
 const StudioContext = createContext<StudioContextValue | null>(null);
+
+type SidebarState = {
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: (collapsed: boolean) => void;
+};
+
+// The rail's open/closed state lives in its own context: only the Sidebar reads it, so
+// toggling the rail does not re-render every page that reads the studio, and studio
+// changes do not re-render the rail.
+const SidebarContext = createContext<SidebarState | null>(null);
 
 // localStorage holds lean metadata only: generated code is 20-30KB per game
 // and would blow the ~5MB quota within a few dozen creations. Full packages
@@ -116,23 +133,29 @@ export function StudioProvider({
     setCreatedGames(loadCachedGames(walletUserId));
   }, [loadCachedGames, walletUserId]);
 
-  const addCreatedGame = (game: any) => {
-    if (!isPlayableCreation(game)) return;
-    setCreatedGames((prev) => {
-      const updated = [game, ...prev.filter((g: any) => g?.id !== game?.id)];
-      persistCreatedGames(walletUserId, updated);
-      return updated;
-    });
-  };
+  const addCreatedGame = useCallback(
+    (game: any) => {
+      if (!isPlayableCreation(game)) return;
+      setCreatedGames((prev) => {
+        const updated = [game, ...prev.filter((g: any) => g?.id !== game?.id)];
+        persistCreatedGames(walletUserId, updated);
+        return updated;
+      });
+    },
+    [walletUserId],
+  );
 
-  const removeCreatedGame = useCallback(async (gameId: string) => {
-    await api.delete(`/games/${encodeURIComponent(gameId)}`).catch(() => {});
-    setCreatedGames((prev) => {
-      const updated = prev.filter((g: any) => g?.id !== gameId);
-      persistCreatedGames(walletUserId, updated);
-      return updated;
-    });
-  }, [walletUserId]);
+  const removeCreatedGame = useCallback(
+    async (gameId: string) => {
+      await api.delete(`/games/${encodeURIComponent(gameId)}`).catch(() => {});
+      setCreatedGames((prev) => {
+        const updated = prev.filter((g: any) => g?.id !== gameId);
+        persistCreatedGames(walletUserId, updated);
+        return updated;
+      });
+    },
+    [walletUserId],
+  );
 
   // A failed pure-agent build leaves a dead draft behind — no code and no
   // template to play. Delete it right away so it never lands in My Creations.
@@ -186,9 +209,7 @@ export function StudioProvider({
           return g;
         });
         const known = new Set(kept.map((g: any) => g?.id));
-        const added = remote.filter(
-          (g: any) => isPlayableCreation(g) && g?.id && !known.has(g.id),
-        );
+        const added = remote.filter((g: any) => isPlayableCreation(g) && g?.id && !known.has(g.id));
         const merged = [...upgraded, ...added];
         persistCreatedGames(walletUserId, merged);
         return merged;
@@ -209,6 +230,8 @@ export function StudioProvider({
     extra,
     isTemplateSyncPaused,
     selectedId,
+    setEngine,
+    setSelectedId,
     theme,
     templatesReady,
   } = studio;
@@ -220,35 +243,64 @@ export function StudioProvider({
     if (!templatesReady) return;
     if (isTemplateSyncPaused()) return;
     createFromTemplate();
-  }, [createFromTemplate, customization, difficulty, extra, isTemplateSyncPaused, selectedId, templatesReady, theme]);
+  }, [
+    createFromTemplate,
+    customization,
+    difficulty,
+    extra,
+    isTemplateSyncPaused,
+    selectedId,
+    templatesReady,
+    theme,
+  ]);
 
   // "Use Template" selects the template, tags it for the Create page, and lets
   // the user describe how the generated game should differ from the base.
-  const openInStudio = (templateId: string) => {
-    void findGameTemplate(templateId).then((template) => {
-      if (template) studio.setEngine(engineOf(template));
-      studio.setSelectedId(templateId);
-      sessionStorage.setItem("dogegame-create-template-id", templateId);
-      openCreatePage();
-    });
-  };
+  const openInStudio = useCallback(
+    (templateId: string) => {
+      void findGameTemplate(templateId).then((template) => {
+        if (template) setEngine(engineOf(template));
+        setSelectedId(templateId);
+        sessionStorage.setItem("dogegame-create-template-id", templateId);
+        openCreatePage();
+      });
+    },
+    [openCreatePage, setEngine, setSelectedId],
+  );
+
+  // One stable object while nothing in it changed, so consumers re-render only on real changes.
+  const value = useMemo<StudioContextValue>(
+    () => ({
+      studio,
+      createdGames,
+      addCreatedGame,
+      removeCreatedGame,
+      refreshCreatedGames,
+      openInStudio,
+      setSidebarCollapsed,
+    }),
+    [studio, createdGames, addCreatedGame, removeCreatedGame, refreshCreatedGames, openInStudio],
+  );
+
+  const sidebar = useMemo<SidebarState>(
+    () => ({ sidebarCollapsed, setSidebarCollapsed }),
+    [sidebarCollapsed],
+  );
 
   return (
-    <StudioContext.Provider
-      value={{
-        studio,
-        createdGames,
-        addCreatedGame,
-        removeCreatedGame,
-        refreshCreatedGames,
-        openInStudio,
-        sidebarCollapsed,
-        setSidebarCollapsed,
-      }}
-    >
-      {children}
+    <StudioContext.Provider value={value}>
+      <SidebarContext.Provider value={sidebar}>{children}</SidebarContext.Provider>
     </StudioContext.Provider>
   );
+}
+
+/** The desktop rail's collapsed state and its setter. */
+export function useSidebarState(): SidebarState {
+  const ctx = useContext(SidebarContext);
+  if (!ctx) {
+    throw new Error("useSidebarState must be used within a StudioProvider");
+  }
+  return ctx;
 }
 
 export function useStudioContext(): StudioContextValue {

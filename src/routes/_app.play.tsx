@@ -1,5 +1,14 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Suspense,
+  lazy,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { Loader2, MessageSquareWarning, Shuffle, Trash2 } from "lucide-react";
 import { PixelIcon, type PixelIconName } from "@/components/term/PixelIcon";
@@ -22,8 +31,6 @@ import { useGameTemplates } from "@/hooks/useGameTemplates";
 import { useReelFeed } from "@/hooks/useReelFeed";
 import { GamePreview } from "@/components/studio/GamePreview";
 import { Html5Preview } from "@/components/studio/Html5Preview";
-import { SimpleAgentGame } from "@/components/studio/SimpleAgentGame";
-import { NeonSudokuGame } from "@/components/studio/NeonSudokuGame";
 import { PlayPageSkeleton } from "@/components/studio/PageSkeletons";
 import { engineOf, templateEmoji, getThumbnailUrl, resolveGameThumbnail } from "@/lib/studio-meta";
 import { GameCoverArtwork } from "@/components/studio/GameCoverArtwork";
@@ -49,6 +56,18 @@ import {
   readPlayReturnPath,
 } from "@/lib/playNavigation";
 import { withAppBase } from "@/lib/appBase";
+
+// Built-in mini games each belong to a single game id, so they load only when that game opens.
+const NeonSudokuGame = lazy(() =>
+  import("@/components/studio/NeonSudokuGame").then((module) => ({
+    default: module.NeonSudokuGame,
+  })),
+);
+const SimpleAgentGame = lazy(() =>
+  import("@/components/studio/SimpleAgentGame").then((module) => ({
+    default: module.SimpleAgentGame,
+  })),
+);
 
 export const Route = createFileRoute("/_app/play")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -1418,9 +1437,13 @@ function PlayFeed() {
                   className={`h-full w-full lg:h-[calc(100%-72px)] ${!isGameActive ? "invisible pointer-events-none" : ""}`}
                 >
                   {isNeonSudoku ? (
-                    <NeonSudokuGame onScoreSubmit={handleScoreSubmit} />
+                    <Suspense fallback={null}>
+                      <NeonSudokuGame onScoreSubmit={handleScoreSubmit} />
+                    </Suspense>
                   ) : isSimpleAgentGame ? (
-                    <SimpleAgentGame onScoreSubmit={handleScoreSubmit} />
+                    <Suspense fallback={null}>
+                      <SimpleAgentGame onScoreSubmit={handleScoreSubmit} />
+                    </Suspense>
                   ) : engine === "construct" ? (
                     <Html5Preview
                       templateId={String(template?.id ?? gameId)}
@@ -2280,7 +2303,10 @@ function DetailsModal({
         aria-label={`${title} details`}
         className="fixed inset-x-0 bottom-0 z-[70] flex max-h-[90vh] flex-col border-t-2 border-phos-3 bg-ink-1 animate-in slide-in-from-bottom lg:inset-x-auto lg:left-1/2 lg:w-full lg:max-w-[560px] lg:-translate-x-1/2 lg:border-x-2"
       >
-        <header className="px-titlebar" style={{ ["--panel-line" as string]: "var(--phos-3)" }}>
+        <header
+          className="px-titlebar"
+          style={{ "--panel-line": "var(--phos-3)" } as React.CSSProperties}
+        >
           <span className="flex-1">cartridge.info</span>
           <button type="button" onClick={onClose} aria-label="Close" className="hover:text-danger">
             <PixelIcon name="close" size={10} />

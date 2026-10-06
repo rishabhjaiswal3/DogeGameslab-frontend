@@ -103,7 +103,7 @@ export function Tag({
     <span
       title={title}
       className={cn("px-tag", className)}
-      style={{ ["--tag" as string]: TONE_VAR[tone] }}
+      style={{ "--tag": TONE_VAR[tone] } as React.CSSProperties}
     >
       {children}
     </span>

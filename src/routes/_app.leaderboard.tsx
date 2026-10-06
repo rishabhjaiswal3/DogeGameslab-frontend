@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { LeaderboardSkeleton } from "@/components/studio/PageSkeletons";
 import { PageHeader } from "@/components/studio/PageHeader";
 import { PixelIcon } from "@/components/term/PixelIcon";
@@ -294,6 +295,106 @@ function Podium({
   );
 }
 
+/** How long the entrance animation runs; rows mounted later by scrolling skip it. */
+const RANK_INTRO_MS = 900;
+
+/**
+ * The ranks below the podium. The list grows by a page on every scroll to the bottom, so
+ * only the rows inside the scroll box (plus a few either side) are mounted.
+ */
+function RankTableRows({
+  rows,
+  activeTab,
+  isCreator,
+  currentUsername,
+  currentWallet,
+  scrollRef,
+}: {
+  rows: RankRow[];
+  activeTab: LeaderboardTab;
+  isCreator: boolean;
+  currentUsername: string;
+  currentWallet: string | null;
+  scrollRef: RefObject<HTMLDivElement | null>;
+}) {
+  // The virtualizer returns a mutable instance, which React Compiler must not memoize.
+  "use no memo";
+  const [intro, setIntro] = useState(true);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setIntro(false), RANK_INTRO_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 56,
+    overscan: 8,
+  });
+
+  return (
+    <ol style={{ position: "relative", height: virtualizer.getTotalSize() }}>
+      {virtualizer.getVirtualItems().map((virtualRow) => {
+        const index = virtualRow.index;
+        const row = rows[index];
+        const score = getScore(row);
+        const isYou = isCurrentUserRow(row, currentUsername, currentWallet);
+        return (
+          <li
+            key={`${activeTab}-${row.rank}`}
+            ref={virtualizer.measureElement}
+            data-index={index}
+            className={cn(
+              "absolute left-0 grid w-full grid-cols-[4.5rem_1fr_auto] items-center gap-3 px-3 py-2.5",
+              intro && "animate-rise",
+              isYou
+                ? "bg-phos/10 shadow-[inset_3px_0_0_0_var(--phos)]"
+                : index % 2 === 0
+                  ? "bg-ink-1"
+                  : "",
+            )}
+            // Positioned with `top`, not a transform: the entrance animation owns the transform.
+            style={{
+              top: virtualRow.start,
+              animationDelay: intro ? `${Math.min(index, 20) * 25}ms` : undefined,
+            }}
+          >
+            <span className="font-term text-[26px] leading-none text-text-3">
+              {ordinal(row.rank)}
+            </span>
+            <span className="min-w-0">
+              <span className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    "truncate font-mono text-[13px] font-bold",
+                    isYou ? "text-phos" : "text-text",
+                  )}
+                >
+                  {row.name}
+                </span>
+                {isYou && <Tag tone="phos">you</Tag>}
+              </span>
+              <span className="block truncate font-mono text-[10px] text-text-3">
+                {compactWallet(row)}
+              </span>
+            </span>
+            <span
+              className={cn(
+                "font-term text-right text-[26px] leading-none tabular-nums",
+                isCreator ? "text-amber" : "text-magenta",
+              )}
+              title={formatStat(score)}
+            >
+              {formatPodiumStat(score)}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function Leaderboard() {
   const [activeTab, setActiveTab] = useState<LeaderboardTab>("creator");
   const [timeRange, setTimeRange] = useState<TimeRange>("weekly");
@@ -368,6 +469,7 @@ function Leaderboard() {
     loadMoreRows,
     hasMoreRows && !loading && tableRows.length > 0,
   );
+  const tableScrollRef = useRef<HTMLDivElement>(null);
 
   return (
     <div className="relative">
@@ -446,7 +548,7 @@ function Leaderboard() {
             <span>Name</span>
             <span className="text-right">{isCreator ? "Creator score" : "Doge Points"}</span>
           </div>
-          <div className="max-h-[620px] overflow-y-auto">
+          <div ref={tableScrollRef} className="max-h-[620px] overflow-y-auto">
             {loading &&
               Array.from({ length: 8 }).map((_, index) => (
                 <div key={index} className="grid grid-cols-[4.5rem_1fr_auto] gap-3 px-3 py-3">
@@ -474,55 +576,15 @@ function Leaderboard() {
                 All ranked users are on the podium.
               </p>
             )}
-            <ol>
-              {tableRows.map((row, index) => {
-                const score = getScore(row);
-                const isYou = isCurrentUserRow(row, currentUsername, currentWallet);
-                return (
-                  <li
-                    key={`${activeTab}-${row.rank}`}
-                    className={cn(
-                      "animate-rise grid grid-cols-[4.5rem_1fr_auto] items-center gap-3 px-3 py-2.5",
-                      isYou
-                        ? "bg-phos/10 shadow-[inset_3px_0_0_0_var(--phos)]"
-                        : index % 2 === 0
-                          ? "bg-ink-1"
-                          : "",
-                    )}
-                    style={{ animationDelay: `${Math.min(index, 20) * 25}ms` }}
-                  >
-                    <span className="font-term text-[26px] leading-none text-text-3">
-                      {ordinal(row.rank)}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="flex items-center gap-2">
-                        <span
-                          className={cn(
-                            "truncate font-mono text-[13px] font-bold",
-                            isYou ? "text-phos" : "text-text",
-                          )}
-                        >
-                          {row.name}
-                        </span>
-                        {isYou && <Tag tone="phos">you</Tag>}
-                      </span>
-                      <span className="block truncate font-mono text-[10px] text-text-3">
-                        {compactWallet(row)}
-                      </span>
-                    </span>
-                    <span
-                      className={cn(
-                        "font-term text-right text-[26px] leading-none tabular-nums",
-                        isCreator ? "text-amber" : "text-magenta",
-                      )}
-                      title={formatStat(score)}
-                    >
-                      {formatPodiumStat(score)}
-                    </span>
-                  </li>
-                );
-              })}
-            </ol>
+            <RankTableRows
+              key={`${activeTab}-${timeRange}`}
+              rows={tableRows}
+              activeTab={activeTab}
+              isCreator={isCreator}
+              currentUsername={currentUsername}
+              currentWallet={currentWallet}
+              scrollRef={tableScrollRef}
+            />
             {(hasMoreRows || loadingMore) && (
               <div
                 ref={loadMoreRef}
