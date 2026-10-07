@@ -1,4 +1,4 @@
-import { api } from "../api";
+import { api, hasUsableCachedToken } from "../api";
 
 export type SocialStats = {
   likes: { liked: boolean; count: number };
@@ -295,6 +295,9 @@ export type NotificationItem = {
 };
 
 export async function fetchNotifications(userId: string, unreadOnly = false) {
+  // Notifications are private to their owner. Until sign-in has produced a
+  // session token there is nothing to ask for, and the request would be a 401.
+  if (!hasUsableCachedToken()) return { userId, notifications: [] as NotificationItem[] };
   const { data } = await api.get(`/social/notifications/${encodeURIComponent(userId)}`, {
     params: { unreadOnly, limit: 20 },
   });

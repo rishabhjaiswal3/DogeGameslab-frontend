@@ -11,6 +11,7 @@ import { PixelIcon } from "@/components/term/PixelIcon";
 import { Btn, Cursor, EmptyState } from "@/components/term/Term";
 import { getCurrentUserId } from "@/lib/identity";
 import { fetchNotifications, markNotificationsRead, type NotificationItem } from "@/lib/api/social";
+import { AUTH_TOKEN_STORED_EVENT } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 function timeAgo(iso: string) {
@@ -47,16 +48,22 @@ export function AppHeader({ className = "" }: { className?: string }) {
   }, [navigate]);
 
   useEffect(() => {
-    const userId = getCurrentUserId();
-    if (!userId) return;
     const refresh = () => {
+      // Read the user each time: sign-in can finish after this header mounts.
+      const userId = getCurrentUserId();
+      if (!userId) return;
       fetchNotifications(userId)
         .then((data) => setNotifications(data.notifications))
         .catch(() => setNotifications([]));
     };
     refresh();
     const interval = window.setInterval(refresh, 30_000);
-    return () => window.clearInterval(interval);
+    // Load them as soon as sign-in completes, not on the next 30s tick.
+    window.addEventListener(AUTH_TOKEN_STORED_EVENT, refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener(AUTH_TOKEN_STORED_EVENT, refresh);
+    };
   }, []);
 
   const openNotifications = async () => {
