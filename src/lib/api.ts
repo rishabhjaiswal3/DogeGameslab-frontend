@@ -40,6 +40,9 @@ export function registerWalletSigner(signer: WalletSigner | null) {
   if (!signer) tokenPromise = null;
 }
 
+/** Fired on window once a studio session token has been stored. */
+export const AUTH_TOKEN_STORED_EVENT = "dogegame-auth-token-stored";
+
 export function storeAuthToken(
   token: string,
   userId?: string | null,
@@ -55,6 +58,7 @@ export function storeAuthToken(
   } catch {
     // localStorage unavailable — ignore
   }
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_TOKEN_STORED_EVENT));
 }
 
 /** The account (wallet address) the stored studio token belongs to. */
@@ -173,7 +177,12 @@ async function fetchTokenWithWallet(): Promise<string | null> {
   } catch (error) {
     // Usually the user declined the signature — don't re-prompt immediately.
     signInBlockedUntil = Date.now() + SIGN_IN_COOLDOWN_MS;
-    studioAuthWarn("wallet sign-in failed — backing off", { error: String(error) });
+    const detail = error as { message?: string; code?: string | number; response?: { status?: number } };
+    studioAuthWarn("wallet sign-in failed — backing off", {
+      error: detail?.message ?? String(error),
+      code: detail?.code ?? null,
+      status: detail?.response?.status ?? null,
+    });
     throw error;
   }
 }

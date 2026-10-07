@@ -219,8 +219,10 @@ function Create() {
   const elapsedSec = activeBuild
     ? Math.max(0, Math.floor((Date.now() - activeBuild.startedAt) / 1000))
     : 0;
+  // The step the build is on. A failed build stops at the step it had reached,
+  // so the log marks that step as failed and never ticks off later ones.
   const step =
-    phase === "building" ? (stageToStep[activeBuild?.progressStage ?? ""] ?? 0) : steps.length - 1;
+    phase === "done" ? steps.length - 1 : (stageToStep[activeBuild?.progressStage ?? ""] ?? 0);
 
   const showNotice = (message: string, kind: "info" | "error" = "info") => {
     setGenerationNotice(message);
@@ -390,12 +392,7 @@ function Create() {
     enhancedPromptDraft.match(/^##\s*Title\s*\n\s*\*\*([^*\n]+)\*\*/i)?.[1]?.trim() ?? "";
   const specLines = Math.max(8, enhancedPromptDraft.split("\n").length);
   const hasBuildPrompt = Boolean(chatInput.trim() || finalPrompt || chatPrompt || studio.prompt);
-  const progress =
-    phase === "done"
-      ? 1
-      : phase === "failed"
-        ? step / (steps.length - 1)
-        : (step + 0.5) / steps.length;
+  const progress = phase === "done" ? 1 : (step + 0.5) / steps.length;
 
   const noticePanel = generationNotice ? (
     <div ref={noticeRef} className="scroll-mt-20">

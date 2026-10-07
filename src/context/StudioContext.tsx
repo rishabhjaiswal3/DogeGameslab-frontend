@@ -9,7 +9,7 @@ import {
 } from "react";
 import { useStudioAuth } from "@/hooks/useStudioAuth";
 import { useCreatorStudio } from "@/hooks/useCreatorStudio";
-import { api } from "@/lib/api";
+import { AUTH_TOKEN_STORED_EVENT, api, hasUsableCachedToken } from "@/lib/api";
 import { engineOf } from "@/lib/studio-meta";
 import { findGameTemplate } from "@/lib/templates-loader";
 import { ownsGame } from "@/lib/identity";
@@ -175,6 +175,10 @@ export function StudioProvider({
       setCreatedGames([]);
       return;
     }
+    // The list is private to its owner, so it needs the session token. Signing
+    // in takes a moment after the wallet connects; the list is fetched again
+    // as soon as the token is stored (see the effect below).
+    if (!hasUsableCachedToken()) return;
     try {
       // Only the current user's creations belong in My Creations.
       const response = await api.get("/games/list", {
@@ -221,6 +225,9 @@ export function StudioProvider({
 
   useEffect(() => {
     void refreshCreatedGames();
+    const onToken = () => void refreshCreatedGames();
+    window.addEventListener(AUTH_TOKEN_STORED_EVENT, onToken);
+    return () => window.removeEventListener(AUTH_TOKEN_STORED_EVENT, onToken);
   }, [refreshCreatedGames]);
 
   const {
