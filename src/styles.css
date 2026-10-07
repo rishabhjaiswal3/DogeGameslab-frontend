@@ -1272,3 +1272,66 @@ kbd {
     transform: scaleX(1);
   }
 }
+
+/* ── Mobile tab bar ────────────────────────────────────────────────────── */
+/* Each tab's colour comes from --tab. Idle tabs are muted; the active one
+   lights up in its own colour inside a small glowing tile. */
+.mobile-tab svg {
+  opacity: 0.6;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+}
+.mobile-tab-tile {
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.mobile-tab-label {
+  transition: color 0.15s ease;
+}
+.mobile-tab:active .mobile-tab-tile {
+  transform: translateY(1px) scale(0.94);
+}
+.mobile-tab[data-status="active"] {
+  color: var(--text);
+}
+.mobile-tab[data-status="active"] svg {
+  opacity: 1;
+}
+.mobile-tab[data-status="active"] .mobile-tab-tile {
+  transform: translateY(-3px);
+  border-color: var(--tab);
+  background: color-mix(in oklab, var(--tab) 14%, transparent);
+  box-shadow:
+    0 3px 0 0 var(--tab),
+    0 0 16px color-mix(in oklab, var(--tab) 45%, transparent);
+}
+.mobile-tab[data-status="active"] .mobile-tab-label {
+  color: var(--tab);
+}
+/* A soft pulse behind the Create button. */
+.mobile-create-ring {
+  border: 2px solid var(--magenta);
+  animation: mobile-create-pulse 2.2s ease-out infinite;
+  pointer-events: none;
+}
+@keyframes mobile-create-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  70%,
+  100% {
+    transform: scale(1.45);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mobile-create-ring {
+    animation: none;
+    opacity: 0;
+  }
+}
