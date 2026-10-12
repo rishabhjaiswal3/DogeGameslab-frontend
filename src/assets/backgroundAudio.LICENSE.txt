@@ -1,0 +1,12 @@
+backgroundAudio.mp3
+
+Title:    Gravity Turn (calm version)
+Author:   vitalezzz
+Source:   https://opengameart.org/content/gravity-turn
+File:     https://opengameart.org/sites/default/files/gravity_turn_calm_6.mp3
+Licence:  CC0 1.0 Universal (public domain dedication)
+          https://creativecommons.org/publicdomain/zero/1.0/
+Fetched:  2026-10-12
+
+CC0 allows copying, modifying and commercial use without permission or credit.
+The file is used unmodified.
